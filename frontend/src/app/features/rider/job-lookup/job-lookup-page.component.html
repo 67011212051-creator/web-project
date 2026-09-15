@@ -1,0 +1,47 @@
+<div class="phone-shell">
+  <div class="topbar">
+    <div class="topbar-title">🛵 ใบงานไรเดอร์</div>
+    <div class="topbar-tag">รอบเที่ยง</div>
+  </div>
+
+  <div class="content">
+    <div class="field">
+      <label>กรอกเลขใบงาน</label>
+      <div class="lookup-row">
+        <input type="text" [ngModel]="jobCodeInput()" (ngModelChange)="jobCodeInput.set($event)" />
+        <button class="btn btn-primary" (click)="onLookup()">ดูใบงาน</button>
+      </div>
+      @if (notFound()) {
+        <div class="hint" style="color:#c0392b;">ไม่พบใบงานนี้ ลองตรวจสอบเลขใบงานอีกครั้ง</div>
+      }
+    </div>
+
+    <div class="job-summary">
+      <div class="job-summary-header">
+        <div class="job-code">ใบงาน {{ jobService.job().code }}</div>
+        <div class="job-boxes">{{ totalBoxesText() }}</div>
+      </div>
+      <div class="job-title">หยิบอาหารทั้งหมด</div>
+
+      <div class="ready-bar">
+        <span><span class="dot"></span> {{ jobService.job().readyText }}</span>
+        <span>{{ jobService.job().deadlineText }}</span>
+      </div>
+
+      <div class="stop-list-label">ลำดับจุดส่ง</div>
+      @for (s of jobService.job().stops; track s.id) {
+        <div class="stop-row">
+          <div class="stop-seq">{{ s.seq }}</div>
+          <div class="stop-info">
+            <div class="stop-title">จุดที่ {{ s.seq }}: ส่งบ้านคุณ{{ s.customerName.slice(-2) }}</div>
+            <div class="stop-sub">{{ s.address }}</div>
+            <div class="stop-eta">คาดถึง {{ s.etaText }}</div>
+          </div>
+          <div class="stop-boxes">{{ s.boxCount }} กล่อง</div>
+        </div>
+      }
+
+      <button class="btn btn-primary btn-block" (click)="onLookup()">📍 เปิดแผนที่ (Google Maps)</button>
+    </div>
+  </div>
+</div>

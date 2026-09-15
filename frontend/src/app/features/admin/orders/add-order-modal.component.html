@@ -1,0 +1,60 @@
+<div class="modal-overlay" (click)="close.emit()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+    <div class="modal-title">เพิ่มออเดอร์</div>
+    <div class="modal-subtitle">เพิ่มออเดอร์เข้ารอบส่งด่วนมื้อเที่ยง</div>
+
+    <div class="field">
+      <label>ลูกค้า *</label>
+      <select [ngModel]="selectedCustomerName()" (ngModelChange)="selectedCustomerName.set($event)">
+        @for (c of customerService.customers(); track c.id) {
+          <option [value]="c.name">{{ c.name }}</option>
+        }
+      </select>
+    </div>
+
+    @if (selectedCustomer(); as c) {
+      <div class="field-static" style="margin-bottom:18px;">
+        <div class="label-sm">ที่อยู่จัดส่ง</div>
+        <div>{{ c.address }} · {{ c.lat }}, {{ c.lng }}</div>
+      </div>
+    }
+
+    <div class="field">
+      <label>จำนวนกล่อง *</label>
+      <select [ngModel]="boxCount()" (ngModelChange)="boxCount.set($event)">
+        <option [value]="1">1 กล่อง</option>
+        <option [value]="2">2 กล่อง</option>
+        <option [value]="3">3 กล่อง</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>เวลาสั่ง *</label>
+      <input type="text" [ngModel]="orderTime()" (ngModelChange)="orderTime.set($event)" />
+    </div>
+
+    <div class="field">
+      <label>เมนู / หมายเหตุ</label>
+      <input type="text" placeholder="ข้าวกะเพรา 2 กล่อง · ไม่ใส่พริก 1 กล่อง" [ngModel]="menuNote()" (ngModelChange)="menuNote.set($event)" />
+    </div>
+
+    <div class="field">
+      <label>สถานะ *</label>
+      <select [ngModel]="status()" (ngModelChange)="status.set($event)">
+        @for (s of statusOptions; track s) {
+          <option [value]="s">{{ s }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="highlight-box">
+      <div style="font-weight:500; font-size:13px; color:#555;">{{ boxCount() }} กล่อง × 65 บาท</div>
+      {{ totalPrice() }} บาท
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" (click)="close.emit()">ยกเลิก</button>
+      <button class="btn btn-primary" (click)="onSave()">เพิ่มออเดอร์</button>
+    </div>
+  </div>
+</div>

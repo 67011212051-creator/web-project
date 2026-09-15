@@ -1,0 +1,26 @@
+<div class="modal-overlay" (click)="close.emit()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+    <div class="modal-title">ตรวจสอบก่อนคำนวณเส้นทาง</div>
+    <div class="modal-subtitle">ยืนยันข้อมูลรอบส่งและเงื่อนไขการคำนวณ</div>
+
+    <div class="highlight-box">6 ออเดอร์พร้อมส่ง</div>
+    <div class="highlight-box">9 กล่องทั้งหมด</div>
+    <div class="highlight-box">3 ไรเดอร์พร้อมงาน</div>
+
+    <div class="check-row"><span>สูงสุด 3 ออเดอร์ต่อไรเดอร์</span><span class="ok">✓</span></div>
+    <div class="check-row"><span>เริ่มส่ง 11:30 น. · ส่งครบก่อน 12:30 น.</span><span class="ok">✓</span></div>
+    <div class="check-row"><span>ความเร็วเฉลี่ย 30 กม./ชม.</span><span class="ok">✓</span></div>
+    <div class="check-row"><span>ค่าเรียกไรเดอร์ 15 บาท/เที่ยว</span><span class="ok">✓</span></div>
+    <div class="check-row"><span>ค่าส่ง 2 บาท/กม./กล่อง</span><span class="ok">✓</span></div>
+
+    <div class="warn-box">
+      <div class="warn-title">⚠ ตรวจพบสิ่งที่ต้องตรวจสอบ</div>
+      1 ออเดอร์ยังไม่มีพิกัด — จะไม่ถูกนำไปคำนวณ · หากไรเดอร์น้อยกว่า 2 คน อาจส่งไม่ทันกำหนด
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" (click)="close.emit()">ยกเลิก</button>
+      <button class="btn btn-primary" (click)="confirmed.emit()">คำนวณเส้นทาง</button>
+    </div>
+  </div>
+</div>

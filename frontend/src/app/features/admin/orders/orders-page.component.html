@@ -1,0 +1,67 @@
+<div class="page-header">
+  <div>
+    <h1>จัดการออเดอร์</h1>
+    <p class="subtitle">ออเดอร์รอบส่งด่วนมื้อเที่ยง · ปิดรับ 11:30 น.</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline" (click)="showSimulateModal.set(true)">▶ จำลองการสั่ง</button>
+    <button class="btn btn-primary" (click)="showAddModal.set(true)">+ เพิ่มออเดอร์</button>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="card stat-card highlight">
+    <div class="stat-label">ออเดอร์ทั้งหมด</div>
+    <div class="stat-value">{{ orderService.totalOrders() }} ออเดอร์</div>
+    <div class="stat-sub">เพิ่มขึ้น 2 รายการใน 15 นาที</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label">จำนวนกล่องรวม</div>
+    <div class="stat-value">{{ orderService.totalBoxes() }} กล่อง</div>
+    <div class="stat-sub">เฉลี่ย {{ orderService.avgBoxPerOrder() }} กล่อง/ออเดอร์</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label">รอจัดเส้นทาง</div>
+    <div class="stat-value">{{ orderService.waitingRouteCount() }} ออเดอร์</div>
+    <div class="stat-sub">พร้อมคำนวณเส้นทาง</div>
+  </div>
+</div>
+
+<div class="card table-card">
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>เลขออเดอร์</th>
+          <th>ชื่อลูกค้า</th>
+          <th>จำนวนกล่อง</th>
+          <th>สถานะ</th>
+          <th>เวลาสั่ง</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (o of orderService.orders(); track o.id) {
+          <tr>
+            <td>{{ o.code }}</td>
+            <td>{{ o.customerName }}</td>
+            <td>{{ o.boxCount }} กล่อง</td>
+            <td><span [class]="badgeClass(o.status)">{{ o.status }}</span></td>
+            <td>{{ o.orderTime }}</td>
+            <td>
+              <button class="btn-icon edit" title="แก้ไข">✎</button>
+              <button class="btn-icon danger" title="ลบ" (click)="deleteOrder(o.id)">🗑</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+@if (showAddModal()) {
+  <app-add-order-modal (close)="showAddModal.set(false)" (added)="showAddModal.set(false)"></app-add-order-modal>
+}
+@if (showSimulateModal()) {
+  <app-simulate-order-modal (close)="showSimulateModal.set(false)" (simulated)="showSimulateModal.set(false)"></app-simulate-order-modal>
+}

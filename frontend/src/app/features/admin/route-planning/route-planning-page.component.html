@@ -1,0 +1,65 @@
+<div class="page-header">
+  <div>
+    <h1>จัดเส้นทางและแบ่งงานไรเดอร์</h1>
+    <p class="subtitle">รอบส่งด่วนมื้อเที่ยง · ต้องส่งครบภายใน 12:30 น.</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline" (click)="showRecalculateModal.set(true)">↻ คำนวณใหม่</button>
+    <button class="btn btn-primary" (click)="showCheckModal.set(true)">🧭 คำนวณเส้นทาง</button>
+  </div>
+</div>
+
+@if (routeService.hasCalculated()) {
+  <div class="status-banner">
+    <div><span class="dot"></span> คำนวณสำเร็จ · {{ routeService.summary().orderCount }} ออเดอร์ แบ่งให้ {{ routeService.summary().riderCount }} ไรเดอร์</div>
+    <div class="on-time">คาดว่าส่งครบ {{ routeService.summary().finishTimeText }} {{ routeService.summary().onTime ? '✓ ทันเวลา' : '⚠ อาจล่าช้า' }}</div>
+  </div>
+}
+
+<div class="layout-grid">
+  <div class="card map-card">
+    <div class="legend">
+      @for (r of routeService.routes(); track r.riderId) {
+        <div class="legend-item"><span class="dot" [style.background]="r.color"></span> ไรเดอร์คนที่ {{ r.riderId }}</div>
+      }
+    </div>
+    <app-mock-map [markers]="mapMarkers()" [routes]="mapRoutes()" height="380px"></app-mock-map>
+  </div>
+
+  <div class="side-col">
+    <div class="card cost-card">
+      <div class="cost-title">ภาพรวมค่าใช้จ่าย</div>
+      <div class="cost-row"><span>รายได้ ({{ routeService.summary().orderCount }} × ฿65)</span><span>฿{{ (routeService.summary().orderCount * 65).toFixed(0) }}</span></div>
+      <div class="cost-row"><span>ต้นทุนอาหาร ({{ routeService.summary().orderCount }} × ฿40)</span><span>– ฿{{ (routeService.summary().orderCount * 40).toFixed(0) }}</span></div>
+      <div class="cost-row"><span>ค่าน้ำมัน ({{ routeService.summary().totalDistanceKm }} กม.)</span><span>– ฿{{ routeService.summary().fuelCost.toFixed(2) }}</span></div>
+      <div class="cost-row"><span>ค่าไรเดอร์ ({{ routeService.summary().riderCount }} ครั้ง)</span><span>– ฿{{ routeService.summary().riderCost.toFixed(0) }}</span></div>
+      <div class="cost-row total"><span>กำไรสุทธิ</span><span>฿{{ routeService.summary().netProfit.toFixed(2) }}</span></div>
+    </div>
+
+    <div class="card time-card">
+      <span>เวลาจัดส่งทั้งหมด</span>
+      <b>{{ routeService.summary().totalMinutes }} นาที</b>
+    </div>
+
+    <div class="card rider-list-card">
+      @for (r of routeService.routes(); track r.riderId) {
+        <div class="rider-item">
+          <div class="rider-item-header">
+            <span><span class="dot" [style.background]="r.color"></span> ไรเดอร์คนที่ {{ r.riderId }}</span>
+            <span>{{ r.distanceKm }} กม.</span>
+          </div>
+          <div class="rider-item-sub">{{ r.orderCount }} ออเดอร์ · {{ r.boxCount }} กล่อง · {{ r.note }}</div>
+        </div>
+      }
+    </div>
+
+    <div class="cost-note">คิดค่าส่ง 2 บาท/กม./กล่อง · ค่าเรียกไรเดอร์ 15 บาท/ครั้ง · ความเร็วเฉลี่ย 30 กม./ชม.</div>
+  </div>
+</div>
+
+@if (showCheckModal()) {
+  <app-check-before-calculate-modal (close)="showCheckModal.set(false)" (confirmed)="onConfirmCalculate()"></app-check-before-calculate-modal>
+}
+@if (showRecalculateModal()) {
+  <app-recalculate-route-modal (close)="showRecalculateModal.set(false)" (confirmed)="onConfirmRecalculate($event)"></app-recalculate-route-modal>
+}

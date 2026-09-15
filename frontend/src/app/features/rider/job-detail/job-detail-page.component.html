@@ -1,0 +1,42 @@
+<div class="phone-shell">
+  @if (job(); as j) {
+    <div class="topbar">
+      <div class="topbar-title">รายละเอียดใบงาน</div>
+      <div class="topbar-tag">{{ j.roundLabel }}</div>
+    </div>
+
+    <div class="content">
+      <div class="job-card">
+        <div class="job-card-status"><span class="dot"></span> {{ j.readyText }}</div>
+        <div class="job-card-title">ออเดอร์: {{ j.code }}</div>
+        <div class="job-card-sub">รับอาหาร 11:30 น.</div>
+        <div class="job-card-boxes">{{ j.totalBoxes }} กล่อง</div>
+      </div>
+
+      <div class="stop-list-label">ลำดับจุดส่ง · {{ j.stops.length }} ออเดอร์</div>
+
+      @for (s of j.stops; track s.id) {
+        <div class="stop-card">
+          <div class="stop-seq">{{ s.seq }}</div>
+          <div class="stop-body">
+            <div class="stop-name">{{ s.customerName }}</div>
+            <div class="stop-boxes">{{ s.boxCount }} กล่อง</div>
+            <div class="stop-phone">☎ {{ s.phone }}</div>
+            <div class="stop-address">{{ s.address }}</div>
+            <div class="stop-eta">คาดถึง {{ s.etaText }}</div>
+            <button class="btn btn-outline nav-btn" (click)="goNavigate(s.id)">
+              {{ s.delivered ? '✓ ส่งแล้ว · ดูอีกครั้ง' : '📍 นำทาง' }}
+            </button>
+          </div>
+        </div>
+      }
+
+      <button class="btn btn-primary btn-block" (click)="startJob()">▶ เริ่มงาน · เปิดเส้นทาง</button>
+    </div>
+  } @else {
+    <div class="content">
+      <p>ไม่พบใบงาน "{{ jobCode() }}"</p>
+      <a routerLink="/rider/lookup" class="btn btn-outline">กลับไปค้นหาใบงาน</a>
+    </div>
+  }
+</div>

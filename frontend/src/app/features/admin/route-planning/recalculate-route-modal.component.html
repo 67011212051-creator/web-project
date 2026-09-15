@@ -1,0 +1,39 @@
+<div class="modal-overlay" (click)="close.emit()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+    <div class="modal-title">คำนวณเส้นทางใหม่</div>
+    <div class="modal-subtitle">ระบบจะเสนอเส้นทางเลือกใหม่ให้ตรวจสอบก่อนยืนยัน</div>
+
+    <div class="highlight-box" style="background:var(--color-dark); color:#fff;">
+      <div style="font-weight:500; font-size:13px; color:#bbb;">แผนปัจจุบัน · 11.3 กม. · 47 นาที</div>
+      กำไร ฿157.40
+    </div>
+
+    <div class="field" style="margin-top:18px;">
+      <label>เลือกเป้าหมายการคำนวณ</label>
+    </div>
+
+    <div class="radio-option" [class.selected]="target() === 'distance'" (click)="select('distance')">
+      <input type="radio" [checked]="target() === 'distance'" readonly /> ระยะทางรวมสั้นที่สุด
+    </div>
+    <div class="radio-option" [class.selected]="target() === 'time'" (click)="select('time')">
+      <input type="radio" [checked]="target() === 'time'" readonly /> เวลารวมสั้นที่สุด
+    </div>
+    <div class="radio-option" [class.selected]="target() === 'profit'" (click)="select('profit')">
+      <input type="radio" [checked]="target() === 'profit'" readonly /> กำไรสูงสุด
+    </div>
+
+    <div class="info-box" style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+      <span>อนุญาตให้เปลี่ยนการแบ่งงานระหว่างไรเดอร์</span>
+      <a href="javascript:void(0)" (click)="toggleReassign()" style="color:var(--color-success); font-weight:700; text-decoration:none;">
+        {{ allowReassign() ? 'เปิด' : 'ปิด' }}
+      </a>
+    </div>
+
+    <div class="hint" style="margin-top:12px;">แผนเดิมจะยังไม่เปลี่ยน จนกว่าคุณจะตรวจสอบและยืนยันเส้นทางเลือกใหม่</div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" (click)="close.emit()">ยกเลิก</button>
+      <button class="btn btn-primary" (click)="onConfirm()">คำนวณใหม่</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">📦</div>
+      <div>
+        <div class="brand-name">LunchFlow</div>
+        <div class="brand-sub">ส่งด่วนมื้อเที่ยง</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a routerLink="/admin/customers" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">👥</span> ลูกค้า
+      </a>
+      <a routerLink="/admin/orders" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">🧾</span> ออเดอร์
+      </a>
+      <a routerLink="/admin/route-planning" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">🧭</span> จัดเส้นทาง
+      </a>
+    </nav>
+
+    <div class="status-box">
+      <div class="status-label">สถานะระบบ</div>
+      <div class="status-value"><span class="dot"></span> พร้อมรับออเดอร์</div>
+      <div class="status-sub">รอบส่ง 11:30–12:30 น.</div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <router-outlet></router-outlet>
+  </main>
+</div>

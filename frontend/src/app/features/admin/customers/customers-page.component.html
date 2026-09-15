@@ -1,0 +1,60 @@
+<div class="page-header">
+  <div>
+    <h1>จัดการข้อมูลลูกค้า</h1>
+    <p class="subtitle">บันทึกที่อยู่และพิกัดสำหรับวางแผนส่งอาหารในรัศมี 3 กม. รอบ มมส</p>
+  </div>
+  <button class="btn btn-primary" (click)="showAddModal.set(true)">+ เพิ่มลูกค้า</button>
+</div>
+
+<div class="layout-grid">
+  <div class="card table-card">
+    <div class="table-card-header">
+      <div class="table-title">ลูกค้าทั้งหมด {{ customerService.customers().length }} คน</div>
+      <div class="search-box">
+        <input type="text" placeholder="ค้นหาชื่อหรือเบอร์โทร" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)" />
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ชื่อ</th>
+            <th>เบอร์โทร</th>
+            <th>ที่อยู่</th>
+            <th>พิกัด (lat/lng)</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of filteredCustomers(); track c.id) {
+            <tr>
+              <td>{{ c.name }}</td>
+              <td>{{ c.phone }}</td>
+              <td>{{ c.address }}</td>
+              <td>{{ c.lat }}, {{ c.lng }}</td>
+              <td>
+                <button class="btn-icon edit" title="แก้ไข">✎</button>
+                <button class="btn-icon danger" title="ลบ" (click)="deleteCustomer(c.id)">🗑</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card map-card">
+    <app-mock-map [markers]="mapMarkers()" [radiusCircle]="true" height="280px"></app-mock-map>
+    <div class="map-caption">
+      <div class="map-caption-title">พื้นที่จัดส่ง มหาวิทยาลัยมหาสารคาม</div>
+      <div class="map-caption-sub">
+        <span class="dot"></span> ลูกค้า {{ customerService.customers().length }} จุด · รัศมีให้บริการ 3 กม.
+      </div>
+    </div>
+  </div>
+</div>
+
+@if (showAddModal()) {
+  <app-add-customer-modal (close)="showAddModal.set(false)" (save)="onSaveCustomer($event)"></app-add-customer-modal>
+}

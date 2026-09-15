@@ -1,0 +1,22 @@
+:host { display: block; min-height: 100vh; background: #e9e6dd; display: flex; justify-content: center; padding: 24px 0; }
+.phone-shell { width: 100%; max-width: 390px; background: #faf7ef; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+.topbar { background: var(--color-dark); color: #fff; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; }
+.back-link { color: #fff; text-decoration: none; font-size: 14px; font-weight: 600; }
+.topbar-tag { color: var(--color-accent); font-size: 12px; font-weight: 700; }
+
+.pin-info {
+  background: #fff; font-size: 12px; color: var(--color-text-muted);
+  padding: 10px 18px; border-bottom: 1px solid var(--color-border);
+  display: flex; align-items: center; gap: 6px;
+}
+.pin-dot { width: 8px; height: 8px; border-radius: 50%; background: #1c1c1c; display: inline-block; }
+
+.content { padding: 18px; }
+.stop-progress { color: var(--color-link); font-weight: 700; font-size: 13px; }
+.stop-eta { color: var(--color-success); font-weight: 700; font-size: 13px; margin-bottom: 12px; }
+
+.customer-name { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
+.customer-address { font-size: 13px; color: var(--color-text-muted); margin-bottom: 14px; }
+
+.call-btn { display: flex; width: 100%; margin-bottom: 12px; color: #c0392b; border-color: #f0c9c4; }
+.btn-block { padding: 15px; font-size: 15px; }

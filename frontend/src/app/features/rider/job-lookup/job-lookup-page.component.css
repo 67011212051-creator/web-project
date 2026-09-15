@@ -1,0 +1,41 @@
+:host { display: block; min-height: 100vh; background: #e9e6dd; display: flex; justify-content: center; padding: 24px 0; }
+.phone-shell { width: 100%; max-width: 390px; background: #faf7ef; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+.topbar { background: var(--color-dark); color: #fff; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; }
+.topbar-title { font-weight: 700; font-size: 16px; }
+.topbar-tag { background: var(--color-accent); color: #201400; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+
+.content { padding: 18px; }
+.lookup-row { display: flex; gap: 8px; }
+.lookup-row input { flex: 1; }
+.lookup-row .btn { white-space: nowrap; }
+
+.job-summary { margin-top: 20px; }
+.job-summary-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--color-text-muted); margin-bottom: 4px; }
+.job-boxes { background: var(--color-cream); color: #7a5300; font-weight: 700; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+.job-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+
+.ready-bar {
+  background: var(--color-success-bg); color: var(--color-success);
+  border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 600;
+  display: flex; justify-content: space-between; margin-bottom: 16px;
+}
+.ready-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-success); display: inline-block; margin-right: 4px; }
+
+.stop-list-label { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+.stop-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--color-border);
+}
+.stop-seq {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--color-accent);
+  color: #201400; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.stop-info { flex: 1; }
+.stop-title { font-weight: 600; font-size: 14px; }
+.stop-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.stop-eta { font-size: 12px; color: var(--color-success); margin-top: 2px; font-weight: 600; }
+.stop-boxes { font-size: 13px; font-weight: 700; color: #c0392b; flex-shrink: 0; }
+
+.btn-block { margin-top: 8px; }

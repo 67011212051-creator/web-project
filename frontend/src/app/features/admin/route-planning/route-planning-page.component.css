@@ -1,0 +1,58 @@
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.page-header h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+.subtitle { color: var(--color-text-muted); font-size: 14px; }
+.header-actions { display: flex; gap: 10px; }
+
+.status-banner {
+  background: var(--color-dark);
+  color: #fff;
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.status-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; display: inline-block; margin-right: 6px; }
+.status-banner .on-time { color: #7ee0a0; font-weight: 600; }
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 980px) { .layout-grid { grid-template-columns: 1fr; } }
+
+.map-card { padding: 16px; }
+.legend { display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px; }
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend .dot, .rider-item-header .dot {
+  width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+}
+
+.side-col { display: flex; flex-direction: column; gap: 14px; }
+.cost-card, .time-card, .rider-list-card { padding: 18px 20px; }
+.cost-title { font-weight: 700; margin-bottom: 12px; font-size: 15px; }
+.cost-row { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; }
+.cost-row.total { border-top: 1px solid var(--color-border); margin-top: 6px; padding-top: 12px; font-weight: 700; font-size: 17px; }
+
+.time-card { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+.time-card b { font-size: 18px; }
+
+.rider-item { padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+.rider-item:last-child { border-bottom: none; }
+.rider-item-header { display: flex; justify-content: space-between; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.rider-item-sub { font-size: 12px; color: var(--color-text-muted); }
+
+.cost-note { font-size: 12px; color: var(--color-text-soft); padding: 0 4px; }
