@@ -28,25 +28,6 @@
       </select>
     </div>
 
-    <div class="field">
-      <label>เวลาสั่ง *</label>
-      <input type="text" [ngModel]="orderTime()" (ngModelChange)="orderTime.set($event)" />
-    </div>
-
-    <div class="field">
-      <label>เมนู / หมายเหตุ</label>
-      <input type="text" placeholder="ข้าวกะเพรา 2 กล่อง · ไม่ใส่พริก 1 กล่อง" [ngModel]="menuNote()" (ngModelChange)="menuNote.set($event)" />
-    </div>
-
-    <div class="field">
-      <label>สถานะ *</label>
-      <select [ngModel]="status()" (ngModelChange)="status.set($event)">
-        @for (s of statusOptions; track s) {
-          <option [value]="s">{{ s }}</option>
-        }
-      </select>
-    </div>
-
     <div class="highlight-box">
       <div style="font-weight:500; font-size:13px; color:#555;">{{ boxCount() }} กล่อง × 65 บาท</div>
       {{ totalPrice() }} บาท

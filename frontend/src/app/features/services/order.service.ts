@@ -23,7 +23,7 @@ export class OrderService {
   );
   readonly waitingRouteCount = computed(() => this._orders().filter(o => o.status === 'รอจัดเส้นทาง').length);
 
-  addOrder(data: { customerName: string; boxCount: number; orderTime: string; menuNote?: string; status: OrderStatus }): Order {
+  addOrder(data: { customerName: string; boxCount: number; orderTime?: string; menuNote?: string; status?: OrderStatus }): Order {
     const order: Order = { id: 'o' + this.nextSeq, code: '#LD-' + this.nextSeq, ...data };
     this.nextSeq++;
     this._orders.update(list => [order, ...list]);

@@ -22,7 +22,7 @@
   </div>
   <div class="card stat-card">
     <div class="stat-label">รอจัดเส้นทาง</div>
-    <div class="stat-value">{{ orderService.waitingRouteCount() }} ออเดอร์</div>
+    <!-- <div class="stat-value">{{ orderService.waitingRouteCount() }} ออเดอร์</div> -->
     <div class="stat-sub">พร้อมคำนวณเส้นทาง</div>
   </div>
 </div>
@@ -46,8 +46,8 @@
             <td>{{ o.code }}</td>
             <td>{{ o.customerName }}</td>
             <td>{{ o.boxCount }} กล่อง</td>
-            <td><span [class]="badgeClass(o.status)">{{ o.status }}</span></td>
-            <td>{{ o.orderTime }}</td>
+            <!-- <td><span [class]="badgeClass(o.status)">{{ o.status }}</span></td> -->
+            <!-- <td>{{ o.orderTime }}</td> -->
             <td>
               <button class="btn-icon edit" title="แก้ไข">✎</button>
               <button class="btn-icon danger" title="ลบ" (click)="deleteOrder(o.id)">🗑</button>
