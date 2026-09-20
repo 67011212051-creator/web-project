@@ -1,75 +1,71 @@
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- ไรเดอร์: แค่รหัส + สีเส้นทาง + โควต้าออเดอร์
-CREATE TABLE riders (
-  rider_id    SERIAL PRIMARY KEY,
-  rider_code  VARCHAR(10) NOT NULL UNIQUE,
-  route_color VARCHAR(7)  NOT NULL,
-  max_orders  SMALLINT    NOT NULL DEFAULT 3
+CREATE TABLE public.riders (
+  rider_id integer NOT NULL DEFAULT nextval('riders_rider_id_seq'::regclass),
+  rider_code character varying NOT NULL UNIQUE,
+  route_color character varying NOT NULL,
+  max_orders smallint NOT NULL DEFAULT 3,
+  CONSTRAINT riders_pkey PRIMARY KEY (rider_id)
 );
-
--- ลูกค้า: ป้ายชื่อจุดส่ง + พิกัด
-CREATE TABLE customers (
-  customer_id SERIAL PRIMARY KEY,
-  label       VARCHAR(50)   NOT NULL,
-  latitude    NUMERIC(10,7) NOT NULL,
-  longitude   NUMERIC(10,7) NOT NULL
+CREATE TABLE public.customers (
+  customer_id integer NOT NULL DEFAULT nextval('customers_customer_id_seq'::regclass),
+  label character varying NOT NULL,
+  latitude numeric NOT NULL,
+  longitude numeric NOT NULL,
+  name character varying,
+  phone character varying,
+  CONSTRAINT customers_pkey PRIMARY KEY (customer_id)
 );
-
--- เมนู
-CREATE TABLE menu_items (
-  item_id    SERIAL PRIMARY KEY,
-  item_name  VARCHAR(80)  NOT NULL,
-  cost_price NUMERIC(8,2) NOT NULL,
-  sell_price NUMERIC(8,2) NOT NULL
+CREATE TABLE public.menu_items (
+  item_id integer NOT NULL DEFAULT nextval('menu_items_item_id_seq'::regclass),
+  item_name character varying NOT NULL,
+  cost_price numeric NOT NULL,
+  sell_price numeric NOT NULL,
+  CONSTRAINT menu_items_pkey PRIMARY KEY (item_id)
 );
-
--- รอบส่ง: 1 วัน 1 รอบ
-CREATE TABLE rounds (
-  round_id   SERIAL PRIMARY KEY,
-  round_date DATE NOT NULL UNIQUE,
-  status     VARCHAR(12) NOT NULL DEFAULT 'planning'
-             CHECK (status IN ('planning','dispatched','completed'))
+CREATE TABLE public.rounds (
+  round_id integer NOT NULL DEFAULT nextval('rounds_round_id_seq'::regclass),
+  round_date date NOT NULL UNIQUE,
+  status character varying NOT NULL DEFAULT 'planning'::character varying CHECK (status::text = ANY (ARRAY['planning'::character varying, 'dispatched'::character varying, 'completed'::character varying]::text[])),
+  CONSTRAINT rounds_pkey PRIMARY KEY (round_id)
 );
-
--- ออเดอร์
-CREATE TABLE orders (
-  order_id     SERIAL PRIMARY KEY,
-  round_id     INT NOT NULL REFERENCES rounds(round_id) ON DELETE CASCADE,
-  customer_id  INT NOT NULL REFERENCES customers(customer_id),
-  delivery_fee NUMERIC(8,2) NOT NULL DEFAULT 0
+CREATE TABLE public.orders (
+  order_id integer NOT NULL DEFAULT nextval('orders_order_id_seq'::regclass),
+  round_id integer NOT NULL,
+  customer_id integer NOT NULL,
+  delivery_fee numeric NOT NULL DEFAULT 0,
+  CONSTRAINT orders_pkey PRIMARY KEY (order_id),
+  CONSTRAINT orders_round_id_fkey FOREIGN KEY (round_id) REFERENCES public.rounds(round_id),
+  CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(customer_id)
 );
-
--- รายการอาหาร: qty = จำนวนกล่อง
-CREATE TABLE order_items (
-  order_id INT NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
-  item_id  INT NOT NULL REFERENCES menu_items(item_id),
-  qty      INT NOT NULL CHECK (qty > 0),
-  PRIMARY KEY (order_id, item_id)
+CREATE TABLE public.order_items (
+  order_id integer NOT NULL,
+  item_id integer NOT NULL,
+  qty integer NOT NULL CHECK (qty > 0),
+  CONSTRAINT order_items_pkey PRIMARY KEY (order_id, item_id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id),
+  CONSTRAINT order_items_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.menu_items(item_id)
 );
-
--- ใบงาน
-CREATE TABLE job_sheets (
-  job_id       SERIAL PRIMARY KEY,
-  job_code     VARCHAR(20) NOT NULL UNIQUE,
-  round_id     INT NOT NULL REFERENCES rounds(round_id) ON DELETE CASCADE,
-  rider_id     INT NOT NULL REFERENCES riders(rider_id),
-  distance_km  NUMERIC(6,2) NOT NULL DEFAULT 0,
-  duration_min INT          NOT NULL DEFAULT 0,
-  rider_pay    NUMERIC(8,2) NOT NULL DEFAULT 0,
-  UNIQUE (round_id, rider_id)
+CREATE TABLE public.job_sheets (
+  job_id integer NOT NULL DEFAULT nextval('job_sheets_job_id_seq'::regclass),
+  job_code character varying NOT NULL UNIQUE,
+  round_id integer NOT NULL,
+  rider_id integer NOT NULL,
+  distance_km numeric NOT NULL DEFAULT 0,
+  duration_min integer NOT NULL DEFAULT 0,
+  rider_pay numeric NOT NULL DEFAULT 0,
+  CONSTRAINT job_sheets_pkey PRIMARY KEY (job_id),
+  CONSTRAINT job_sheets_round_id_fkey FOREIGN KEY (round_id) REFERENCES public.rounds(round_id),
+  CONSTRAINT job_sheets_rider_id_fkey FOREIGN KEY (rider_id) REFERENCES public.riders(rider_id)
 );
-
--- ลำดับจุดส่ง
-CREATE TABLE job_stops (
-  job_id      INT NOT NULL REFERENCES job_sheets(job_id) ON DELETE CASCADE,
-  order_id    INT NOT NULL UNIQUE REFERENCES orders(order_id),
-  stop_seq    SMALLINT NOT NULL,
-  distance_km NUMERIC(6,2) NOT NULL DEFAULT 0,
-  is_done     BOOLEAN NOT NULL DEFAULT FALSE,
-  PRIMARY KEY (job_id, stop_seq)
+CREATE TABLE public.job_stops (
+  job_id integer NOT NULL,
+  order_id integer NOT NULL UNIQUE,
+  stop_seq smallint NOT NULL,
+  distance_km numeric NOT NULL DEFAULT 0,
+  is_done boolean NOT NULL DEFAULT false,
+  CONSTRAINT job_stops_pkey PRIMARY KEY (job_id, stop_seq),
+  CONSTRAINT job_stops_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.job_sheets(job_id),
+  CONSTRAINT job_stops_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id)
 );
-
-CREATE INDEX idx_orders_round ON orders(round_id);
-CREATE INDEX idx_jobs_round   ON job_sheets(round_id);
