@@ -1,0 +1,55 @@
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--color-sidebar);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 16px;
+  height: 100vh;
+  overflow-y: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 24px;
+}
+.logo {
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.brand-name { font-weight: 700; font-size: 16px; }
+.brand-sub { font-size: 11px; color: #9a968d; }
+
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  color: #c9c5bc;
+  font-weight: 600;
+  font-size: 14px;
+}
+.nav-item:hover { background: var(--color-sidebar-hover); color: #fff; }
+.nav-item.active { background: var(--color-primary); color: #201d18; }
+.icon { font-size: 16px; width: 20px; text-align: center; }
+
+.status-box {
+  margin-top: auto;
+  background: var(--color-sidebar-active);
+  border-radius: 12px;
+  padding: 14px;
+}
+.status-title { font-size: 12px; color: #9a968d; margin-bottom: 8px; }
+.status-line { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #34c471; display: inline-block; }
+.status-time { font-size: 12px; color: #9a968d; }

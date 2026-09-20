@@ -1,0 +1,15 @@
+.shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  align-items: stretch;
+}
+.content {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto
+}
+.shell.no-sidebar {
+  display: block;
+}

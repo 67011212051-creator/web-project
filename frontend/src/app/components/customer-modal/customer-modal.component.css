@@ -1,0 +1,12 @@
+.map-preview {
+  height: 150px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(45deg, #eef1e8, #eef1e8 10px, #e6ead9 10px, #e6ead9 20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.pin { font-size: 28px; }
+.loc-btn { width: 100%; margin-bottom: 6px; }
+.required-hint { color: var(--color-primary-dark); margin-bottom: 4px; }

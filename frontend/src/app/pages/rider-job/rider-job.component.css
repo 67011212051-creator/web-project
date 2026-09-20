@@ -1,0 +1,100 @@
+:host {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  background: #e9e6de;
+  padding: 24px 12px;
+}
+.phone-frame {
+  width: 100%;
+  max-width: 390px;
+  background: #faf9f6;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  min-height: 640px;
+}
+.topbar {
+  background: #f4a623;
+  color: #201d18;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar.dark { background: #201d18; color: #fff; }
+.logo-badge { font-size: 18px; }
+.topbar-title { font-weight: 700; flex: 1; }
+.topbar-round { font-size: 12px; opacity: 0.85; }
+.back-btn { background: transparent; border: none; color: #fff; font-weight: 600; flex: 1; text-align: left; font-size: 14px; }
+
+.body { padding: 18px; }
+.lookup-row { display: flex; gap: 8px; margin-top: 6px; }
+.lookup-row input { flex: 1; }
+
+.job-summary {
+  background: var(--color-warning-bg);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+.job-code { font-size: 12px; color: var(--color-text-muted); margin-bottom: 4px; }
+.job-status { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-success-text); font-size: 13px; margin-bottom: 8px; }
+.job-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-success-text); }
+.job-pickup { font-size: 12px; color: var(--color-text-muted); }
+.job-boxes { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+.section-title { font-weight: 700; margin: 6px 0 12px; }
+
+.point-card {
+  display: flex;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.point-num {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--color-primary);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
+}
+.point-name { font-weight: 700; }
+.point-box { color: var(--color-primary-dark); font-weight: 700; font-size: 12px; margin: 2px 0; }
+.point-phone { font-size: 12px; color: #2563a8; margin-bottom: 2px; }
+.point-address { font-size: 12px; color: var(--color-text-muted); margin-bottom: 8px; }
+.nav-btn { padding: 6px 14px; font-size: 12px; }
+
+.start-btn { width: 100%; margin-top: 8px; padding: 14px; font-size: 15px; }
+
+.map-mock {
+  position: relative;
+  height: 300px;
+  background: repeating-linear-gradient(45deg, #eef1e8, #eef1e8 12px, #e6ead9 12px, #e6ead9 24px);
+}
+.map-tag {
+  position: absolute; top: 10px; left: 10px;
+  background: #fff; padding: 6px 10px; border-radius: 8px; font-size: 11px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+.map-pin {
+  position: absolute;
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #f4a623; color: #201d18;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.map-pin.active { background: #201d18; color: #fff; width: 36px; height: 36px; }
+.map-path {
+  position: absolute; bottom: 20px; left: 20px; width: 40%; height: 4px;
+  background: #3a7bd5; transform: rotate(-30deg); border-radius: 4px;
+}
+
+.progress-label { font-size: 12px; color: var(--color-text-muted); }
+.progress-eta { color: var(--color-success-text); font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.dest-name { font-weight: 700; font-size: 17px; margin-bottom: 4px; }
+.dest-address { font-size: 13px; color: var(--color-text-muted); margin-bottom: 16px; }
+.call-btn { width: 100%; margin-bottom: 10px; }
+.arrive-btn { width: 100%; padding: 14px; font-size: 15px; }

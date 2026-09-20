@@ -1,59 +1,46 @@
-# Frontend
+# LunchFlow Admin
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.0.7.
+Angular (standalone components, Angular 17) scaffold for the LunchFlow "ส่งด่วนมื้อเที่ยง"
+rider dispatch system, based on the provided screenshots/brief.
 
-## Development server
+โฟลเดอร์ตามที่ขอ (ไม่มี services/ และ models/ — ข้อมูลเป็น mock อยู่ในแต่ละ component โดยตรง):
 
-To start a local development server, run:
-
-```bash
-ng serve
+```
+src/app/
+├── app.component.*         # shell: sidebar + <router-outlet>
+├── app.routes.ts
+├── app.config.ts
+├── pages/
+│   ├── customers/          # จัดการข้อมูลลูกค้า
+│   ├── orders/              # จัดการออเดอร์
+│   ├── route-planning/      # จัดเส้นทางและแบ่งงานไรเดอร์
+│   └── rider-job/           # หน้าจอไรเดอร์ (มือถือ): ดูใบงาน -> รายละเอียด -> นำทาง
+└── components/
+    ├── sidebar/
+    ├── customer-modal/       # เพิ่ม/แก้ไขลูกค้า
+    ├── order-modal/          # เพิ่มออเดอร์
+    ├── simulate-order-modal/ # จำลองออเดอร์
+    ├── recalculate-modal/    # คำนวณเส้นทางใหม่
+    └── precheck-modal/       # ตรวจสอบก่อนคำนวณเส้นทาง
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## รันโปรเจกต์
 
 ```bash
-ng generate component component-name
+npm install
+npm start
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+จากนั้นเปิด http://localhost:4200
 
-```bash
-ng generate --help
-```
+- `/customers` จัดการลูกค้า
+- `/orders` จัดการออเดอร์
+- `/route-planning` จัดเส้นทาง + คำนวณใหม่/ตรวจสอบก่อนคำนวณ
+- `/rider` หน้าจอไรเดอร์ (mobile-style, ไม่มี sidebar) — ลองพิมพ์เลขใบงานอะไรก็ได้แล้วกด "ดูใบงาน"
 
-## Building
+## หมายเหตุ
 
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- แผนที่เป็น placeholder (ลายเส้นทแยง + หมุด CSS) ยังไม่ได้ต่อ Google Maps API จริง —
+  จุดที่ต้องต่อคือ `map-area` ใน `customers`, `route-planning` และ `map-mock` ใน `rider-job`
+- ข้อมูลลูกค้า/ออเดอร์/เส้นทางเป็น mock data ฝังในแต่ละ component (ไม่มี services/models ตามที่ขอ)
+  ถ้าจะต่อ backend จริง แนะนำแยกกลับเป็น services + models ภายหลัง

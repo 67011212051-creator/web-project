@@ -1,0 +1,58 @@
+<div class="modal-overlay">
+  <div class="modal">
+    <h2>เพิ่มออเดอร์</h2>
+    <p class="sub">เพิ่มออเดอร์เข้ารอบส่งด่วนมื้อเที่ยง</p>
+
+    <div class="field">
+      <label>ลูกค้า *</label>
+      <select>
+        <option value="" disabled>เลือกลูกค้า</option>
+        <option value="c1" selected>คุณอรทัย พรมมา</option>
+        <option value="c2">คุณกิตติศักดิ์ แสงทอง</option>
+        <option value="c3">คุณณัฐณิชา วงศ์คำ</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <div class="address-box">
+        <div class="hint">ที่อยู่จัดส่ง</div>
+        <div>หมู่บ้านเอื้ออาทร ท่าขอนยาง</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>จำนวนกล่อง *</label>
+      <input type="number" min="1" max="3" value="2" placeholder="2 กล่อง (เลือกได้ 1-3)" />
+    </div>
+
+    <div class="field">
+      <label>เวลาสั่ง *</label>
+      <input type="time" value="10:42" />
+    </div>
+
+    <div class="field">
+      <label>เมนู / หมายเหตุ</label>
+      <input type="text" value="ข้าวกะเพรา 2 กล่อง · ไม่ใส่พริก 1 กล่อง" />
+    </div>
+
+    <div class="field">
+      <label>สถานะ *</label>
+      <select>
+        <option selected>รอจัดเส้นทาง</option>
+        <option>กำลังเตรียม</option>
+        <option>จัดเส้นทางแล้ว</option>
+        <option>ส่งสำเร็จ</option>
+      </select>
+    </div>
+
+    <div class="price-box">
+      <div class="hint">2 กล่อง × 65 บาท</div>
+      <div class="price-total">130 บาท</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary">ยกเลิก</button>
+      <button class="btn btn-primary">เพิ่มออเดอร์</button>
+    </div>
+  </div>
+</div>

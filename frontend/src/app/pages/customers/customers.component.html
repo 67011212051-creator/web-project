@@ -1,0 +1,96 @@
+<div class="page">
+  <header class="page-header">
+    <div>
+      <h1>จัดการข้อมูลลูกค้า</h1>
+      <p class="sub">บันทึกที่อยู่และพิกัดสำหรับวางแผนส่งอาหารในรัศมี 3 กม. รอบ มมส</p>
+    </div>
+    <button class="btn btn-primary">+ เพิ่มลูกค้า</button>
+  </header>
+
+  <div class="content-grid">
+    <div class="card table-card">
+      <div class="table-header">
+        <div>ลูกค้าทั้งหมด 5 คน</div>
+        <input type="text" placeholder="🔍 ค้นหาชื่อหรือเบอร์โทร" />
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ชื่อ</th>
+            <th>เบอร์โทร</th>
+            <th>ที่อยู่</th>
+            <th>พิกัด (lat/lng)</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>คุณอรทัย พรมมา</td>
+            <td>089-245-7812</td>
+            <td>หมู่บ้านเอื้ออาทร ท่าขอนยาง</td>
+            <td>16.2458, 103.2506</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger">🗑</button>
+            </td>
+          </tr>
+          <tr>
+            <td>คุณกิตติศักดิ์ แสงทอง</td>
+            <td>081-673-9021</td>
+            <td>ถ.ขามเรียง ใกล้ประตู 2 มมส</td>
+            <td>16.2487, 103.2531</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger">🗑</button>
+            </td>
+          </tr>
+          <tr>
+            <td>คุณณัฐณิชา วงศ์คำ</td>
+            <td>095-148-3356</td>
+            <td>หอพักสุใจ ต.ขามเรียง</td>
+            <td>16.2421, 103.2558</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger">🗑</button>
+            </td>
+          </tr>
+          <tr>
+            <td>คุณธนกร ศรีบุญเรือง</td>
+            <td>086-552-4108</td>
+            <td>บ้านดินดำ อ.กันทรวิชัย</td>
+            <td>16.2389, 103.2462</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger">🗑</button>
+            </td>
+          </tr>
+          <tr>
+            <td>คุณพิมพ์ชนก ใจดี</td>
+            <td>092-883-7124</td>
+            <td>เดอะการ์เด้นท์ เรสซิเดนซ์</td>
+            <td>16.2513, 103.2480</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger">🗑</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card map-card">
+      <div class="map-area">
+        <div class="pin" style="top: 20%; left: 25%;">1</div>
+        <div class="pin" style="top: 35%; left: 47%;">2</div>
+        <div class="pin" style="top: 50%; left: 69%;">3</div>
+        <div class="pin" style="top: 65%; left: 25%;">4</div>
+        <div class="pin" style="top: 80%; left: 47%;">5</div>
+      </div>
+      <div class="map-footer">
+        <div>พื้นที่จัดส่ง มหาวิทยาลัยมหาสารคาม</div>
+        <div class="hint">ลูกค้า 5 จุด · รัศมีให้บริการ 3 กม.</div>
+      </div>
+    </div>
+  </div>
+</div>

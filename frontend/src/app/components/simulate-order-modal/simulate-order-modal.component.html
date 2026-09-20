@@ -1,0 +1,48 @@
+<div class="modal-overlay">
+  <div class="modal">
+    <h2>จำลองออเดอร์</h2>
+    <p class="sub">สร้างชุดออเดอร์ตัวอย่างเพื่อทดสอบการจัดเส้นทาง</p>
+
+    <div class="field">
+      <label>เลือกลูกค้า / ค้นหา *</label>
+      <input type="text" placeholder="ค้นหาชื่อหรือเบอร์โทร" />
+    </div>
+
+    <div class="radio-option selected">
+      <input type="radio" checked />
+      <span>สุ่มลูกค้าจากรายชื่อทั้งหมด</span>
+    </div>
+
+    <div class="field">
+      <label>จำนวนออเดอร์จำลอง</label>
+      <input type="number" value="25" />
+      <div class="hint">ช่วงแนะนำ 20-30 ออเดอร์</div>
+    </div>
+
+    <div class="field">
+      <label>จำนวนกล่องต่อออเดอร์</label>
+      <input type="text" value="สุ่ม 1-3 กล่อง" />
+      <div class="hint">สูงสุด 3 กล่อง</div>
+    </div>
+
+    <div class="field">
+      <label>เวลาสั่ง</label>
+      <input type="text" value="10:30-11:25 น." />
+    </div>
+
+    <div class="field">
+      <label>กำหนดส่ง *</label>
+      <input type="text" value="12:30 น." />
+    </div>
+
+    <div class="info-box">
+      <strong>ระบบจะสร้างออเดอร์จำลอง 25 รายการ</strong>
+      <div>สุ่มลูกค้า เวลา และจำนวน 1-3 กล่อง พร้อมสถานะ "รอจัดเส้นทาง" โดยไม่กระทบออเดอร์จริง</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary">ยกเลิก</button>
+      <button class="btn btn-primary">เริ่มจำลอง</button>
+    </div>
+  </div>
+</div>
