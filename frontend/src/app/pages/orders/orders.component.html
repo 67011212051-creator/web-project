@@ -1,4 +1,5 @@
 <div class="page">
+  
   <header class="page-header">
     <div>
       <h1>จัดการออเดอร์</h1>
@@ -6,15 +7,14 @@
     </div>
     <div class="header-actions">
       <button class="btn btn-secondary">◎ จำลองการสั่ง</button>
-      <button class="btn btn-primary">+ เพิ่มออเดอร์</button>
+      <button class="btn btn-primary" (click)="callApi()">+ เพิ่มออเดอร์</button>
     </div>
   </header>
 
   <div class="stats-row">
     <div class="card stat-card highlight">
       <div class="stat-label">ออเดอร์ทั้งหมด</div>
-      <div class="stat-value">5 ออเดอร์</div>
-      <div class="stat-hint">อัปเดตล่าสุดเมื่อสักครู่</div>
+      <div class="stat-value">{{ orders().length }} ออเดอร์</div>
     </div>
     <div class="card stat-card">
       <div class="stat-label">จำนวนกล่องรวม</div>
@@ -40,7 +40,7 @@
       </thead>
       <tbody>
         <tr>
-          <td class="mono">#LD-1048</td>
+          <td class="mono">{{ orders()[0].orders_id }}</td>
           <td>คุณอรทัย พรมมา</td>
           <td>2 กล่อง</td>
           <td class="actions">
