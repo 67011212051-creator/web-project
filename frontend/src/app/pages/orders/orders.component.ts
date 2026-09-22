@@ -36,12 +36,11 @@ export class OrdersComponent implements OnInit {
 
       const combinedData = ordersData.map((order) => {
         const customer = customersData.find((customer) => customer.customer_id === order.customer_id);
-        const totalQty = ordersData.reduce((sum, item) => sum + (item.qty || 1), 0);
 
         return {
           ...order,
           customer: customer,
-          totalQuantity: totalQty,
+          totalQuantity: order.qty,
         };
       });
 
