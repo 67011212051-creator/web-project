@@ -1,7 +1,13 @@
 import express from 'express'
+import cors from 'cors' // 1. import cors
 import { dbconnect } from './dbconnect'
 
 const app = express()
+
+// 2. เปิดใช้งาน CORS (แนะนำระบุ origin ที่อนุญาต หรือใช้ cors() เพื่อปลดล็อกทุก domain ในช่วง dev)
+app.use(cors({
+  origin: 'http://localhost:4200'
+}))
 
 const getAllRows = (table: string) => async (_req: express.Request, res: express.Response) => {
   const { data, error } = await dbconnect.from(table).select('*')
@@ -23,7 +29,8 @@ app.get('/order_items', getAllRows('order_items'))
 app.get('/job_sheets', getAllRows('job_sheets'))
 app.get('/job_stops', getAllRows('job_stops'))
 
-app.use("/", (req, res) => {
+// เปลี่ยนจาก app.use เป็น app.get เพื่อไม่ให้ไปทับ HTTP method อื่นๆ
+app.get("/", (_req, res) => {
   res.send("Hello World!!!");
 });
 
