@@ -1,12 +1,13 @@
 <div class="page">
   <header class="page-header">
-    <div>
+    <div class="header-title">
       <h1>จัดการออเดอร์</h1>
       <p class="sub">ออเดอร์รอบส่งด่วนมื้อเที่ยง · ปิดรับ 11:30 น.</p>
     </div>
+
     <div class="header-actions">
-      <button class="btn btn-secondary">◎ จำลองการสั่ง</button>
-      <button class="btn btn-primary" (click)="callApi()">
+      <button class="btn btn-secondary" type="button">จำลองการสั่ง</button>
+      <button class="btn btn-primary" type="button" (click)="callApi()">
         + เพิ่มออเดอร์
       </button>
     </div>
@@ -17,6 +18,7 @@
       <div class="stat-label">ออเดอร์ทั้งหมด</div>
       <div class="stat-value">{{ orders().length }} ออเดอร์</div>
     </div>
+
     <div class="card stat-card">
       <div class="stat-label">จำนวนกล่องรวม</div>
       <div class="stat-value">9 กล่อง</div>
@@ -25,34 +27,41 @@
   </div>
 
   <div class="card table-card">
-    <table>
-      <thead>
-        <tr>
-          <th>เลขออเดอร์</th>
-          <th>ชื่อลูกค้า</th>
-          <th>จำนวนกล่อง</th>
-          <th>จัดการ</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (item of orders(); track item.order_id) {
+    <div class="table-scroll">
+      <table>
+        <thead>
           <tr>
-            <td class="mono">{{ item.order_id }}</td>
-            <td>{{ item.customer?.name }}</td>
-            <td>{{ item.totalQuantity || 0 }} กล่อง</td>
-            <td></td>
-            <td class="actions">
-              <button class="btn-icon">✎</button>
-              <button class="btn-icon-danger">🗑</button>
-            </td>
+            <th>เลขออเดอร์</th>
+            <th>ชื่อลูกค้า</th>
+            <th>จำนวนกล่อง</th>
+            <th class="col-actions">จัดการ</th>
           </tr>
-        } @empty {
-          <tr>
-            <td colspan="5" style="text-align: center;">ไม่พบข้อมูลออเดอร์</td>
-          </tr>
-        }
+        </thead>
 
-      </tbody>
-    </table>
+        <tbody>
+          @for (item of orders(); track item.order_id) {
+            <tr>
+              <td class="mono" data-label="เลขออเดอร์">{{ item.order_id }}</td>
+              <td data-label="ชื่อลูกค้า">{{ item.customer?.name }}</td>
+              <td data-label="จำนวนกล่อง">
+                {{ item.totalQuantity || 0 }} กล่อง
+              </td>
+              <td class="actions" data-label="จัดการ">
+                <button class="btn-icon" type="button" aria-label="แก้ไข">
+                  แก้ไข
+                </button>
+                <button class="btn-icon-danger" type="button" aria-label="ลบ">
+                  ลบ
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr class="empty-row">
+              <td colspan="4">ไม่พบข้อมูลออเดอร์</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
