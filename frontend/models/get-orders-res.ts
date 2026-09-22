@@ -3,4 +3,5 @@ export interface getOrdersResponse {
   round_id: number;
   customer_id: number;
   delivery_fee: number;
+  qty: number;
 }

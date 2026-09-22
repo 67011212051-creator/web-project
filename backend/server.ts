@@ -22,10 +22,8 @@ const getAllRows = (table: string) => async (_req: express.Request, res: express
 
 app.get('/riders', getAllRows('riders'))
 app.get('/customers', getAllRows('customers'))
-app.get('/menu_items', getAllRows('menu_items'))
 app.get('/rounds', getAllRows('rounds'))
 app.get('/orders', getAllRows('orders'))
-app.get('/order_items', getAllRows('order_items'))
 app.get('/job_sheets', getAllRows('job_sheets'))
 app.get('/job_stops', getAllRows('job_stops'))
 

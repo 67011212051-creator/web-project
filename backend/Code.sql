@@ -10,19 +10,11 @@ CREATE TABLE public.riders (
 );
 CREATE TABLE public.customers (
   customer_id integer NOT NULL DEFAULT nextval('customers_customer_id_seq'::regclass),
-  label character varying NOT NULL,
+  name character varying NOT NULL,
+  phone character varying NOT NULL,
   latitude numeric NOT NULL,
   longitude numeric NOT NULL,
-  name character varying,
-  phone character varying,
   CONSTRAINT customers_pkey PRIMARY KEY (customer_id)
-);
-CREATE TABLE public.menu_items (
-  item_id integer NOT NULL DEFAULT nextval('menu_items_item_id_seq'::regclass),
-  item_name character varying NOT NULL,
-  cost_price numeric NOT NULL,
-  sell_price numeric NOT NULL,
-  CONSTRAINT menu_items_pkey PRIMARY KEY (item_id)
 );
 CREATE TABLE public.rounds (
   round_id integer NOT NULL DEFAULT nextval('rounds_round_id_seq'::regclass),
@@ -35,17 +27,10 @@ CREATE TABLE public.orders (
   round_id integer NOT NULL,
   customer_id integer NOT NULL,
   delivery_fee numeric NOT NULL DEFAULT 0,
+  qty smallint NOT NULL,
   CONSTRAINT orders_pkey PRIMARY KEY (order_id),
   CONSTRAINT orders_round_id_fkey FOREIGN KEY (round_id) REFERENCES public.rounds(round_id),
   CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(customer_id)
-);
-CREATE TABLE public.order_items (
-  order_id integer NOT NULL,
-  item_id integer NOT NULL,
-  qty integer NOT NULL CHECK (qty > 0),
-  CONSTRAINT order_items_pkey PRIMARY KEY (order_id, item_id),
-  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id),
-  CONSTRAINT order_items_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.menu_items(item_id)
 );
 CREATE TABLE public.job_sheets (
   job_id integer NOT NULL DEFAULT nextval('job_sheets_job_id_seq'::regclass),
@@ -64,7 +49,6 @@ CREATE TABLE public.job_stops (
   order_id integer NOT NULL UNIQUE,
   stop_seq smallint NOT NULL,
   distance_km numeric NOT NULL DEFAULT 0,
-  is_done boolean NOT NULL DEFAULT false,
   CONSTRAINT job_stops_pkey PRIMARY KEY (job_id, stop_seq),
   CONSTRAINT job_stops_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.job_sheets(job_id),
   CONSTRAINT job_stops_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id)
