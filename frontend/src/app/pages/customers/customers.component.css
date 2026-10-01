@@ -1,35 +1,64 @@
-.page { padding: 30px 36px; }
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.page {
+  padding: 28px 32px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
 .page-header h1 { font-size: 24px; }
-.page-header .sub { color: var(--color-text-muted); font-size: 13px; margin-top: 4px; }
+.sub { color: var(--color-text-muted); font-size: 13px; margin-top: 4px; }
 
-.content-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; align-items: start; }
-@media (max-width: 980px) { .content-grid { grid-template-columns: 1fr; } }
+/* min-width: 0 สำคัญ ไม่งั้นแผนที่ดัน grid ให้กว้างเกินและ Leaflet คำนวณผิด */
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
 
-.table-card { padding: 20px; }
-.table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-weight: 600; gap: 16px; }
+.table-card { padding: 20px; min-width: 0; }
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
 .table-header input { max-width: 260px; }
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--color-text-muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--color-border); }
-td { padding: 12px 10px; border-bottom: 1px solid var(--color-border); }
-.actions { display: flex; gap: 4px; }
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.actions { white-space: nowrap; }
 
-.map-card { overflow: hidden; }
+.map-card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+/* ต้องมีความสูงชัดเจน และห้ามใส่ transform / overflow ที่นี่ */
 .map-area {
+  height: 420px;
+  width: 100%;
+  border-radius: 10px;
   position: relative;
-  height: 320px;
-  background: repeating-linear-gradient(45deg, #eef1e8, #eef1e8 12px, #e6ead9 12px, #e6ead9 24px);
+  z-index: 0;
 }
-.pin {
-  position: absolute;
-  width: 26px; height: 26px;
-  background: var(--color-primary);
-  color: #201d18;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-}
-.map-footer { padding: 14px 16px; }
-.map-footer .hint { margin-top: 2px; }
+
+.map-footer { padding: 14px 6px 4px; font-weight: 600; }

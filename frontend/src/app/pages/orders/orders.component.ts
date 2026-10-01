@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { lastValueFrom, forkJoin } from 'rxjs';
 import { getOrdersResponse } from '../../../../models/get-orders-res';
@@ -21,6 +21,18 @@ export class OrdersComponent implements OnInit {
 
   orders = signal<OrderWithItems[]>([]);
 
+  totalQty = computed(() =>
+    this.orders().reduce((sum, order) => sum + order.qty, 0)
+  );
+
+  qtyByCustomer = computed(() => {
+    const map = new Map<number, number>();
+    for (const o of this.orders()) {
+      map.set(o.customer_id, (map.get(o.customer_id) ?? 0) + o.qty);
+    }
+    return map;
+  });
+
   ngOnInit() {
     this.callApi();
   }
@@ -34,8 +46,10 @@ export class OrdersComponent implements OnInit {
         ])
       );
 
-      const combinedData = ordersData.map((order) => {
-        const customer = customersData.find((customer) => customer.customer_id === order.customer_id);
+      const combinedData: OrderWithItems[] = ordersData.map((order) => {
+        const customer = customersData.find(
+          (c) => c.customer_id === order.customer_id
+        );
 
         return {
           ...order,

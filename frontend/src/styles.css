@@ -149,3 +149,47 @@ label { font-weight: 600; font-size: 13px; display: block; margin-bottom: 6px; }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #d8d3c8; border-radius: 8px; }
+
+/* ===== Leaflet: กัน global style มากระทบแผนที่ ===== */
+.leaflet-container {
+  font-family: inherit;
+  background: #ddd;
+}
+.leaflet-container img,
+.leaflet-container .leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+  width: auto;
+  height: auto;
+  box-shadow: none;
+}
+.leaflet-container *,
+.leaflet-container *::before,
+.leaflet-container *::after {
+  box-sizing: content-box;
+}
+.leaflet-container .leaflet-control-container * {
+  box-sizing: border-box;
+}
+.leaflet-container input {
+  width: auto;
+  padding: 0;
+  border: none;
+}
+
+/* หมุดตัวเลข (Leaflet สร้าง element นอก component จึงต้องอยู่ global) */
+.leaflet-container .num-pin {
+  box-sizing: border-box;
+  background: var(--color-primary);
+  color: #201d18;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
