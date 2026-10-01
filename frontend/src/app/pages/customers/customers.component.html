@@ -35,7 +35,7 @@
               <td>{{ c.latitude }}, {{ c.longitude }}</td>
               <td class="actions">
                 <button class="btn-icon">✎</button>
-                <button class="btn-icon-danger">🗑</button>
+                <button class="btn-icon-danger" (click)="deleteCustomer(c.customer_id)">🗑</button>
               </td>
             </tr>
           } @empty {

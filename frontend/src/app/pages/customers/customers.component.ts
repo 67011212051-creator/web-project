@@ -2,7 +2,8 @@ import {
   Component, OnInit, AfterViewInit, OnDestroy, ElementRef,
   inject, signal, computed, effect, viewChild,
 } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
@@ -12,7 +13,7 @@ const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 @Component({
   selector: 'app-customers',
   standalone: true,
-  imports: [],
+  imports: [CommonModule],
   templateUrl: './customers.component.html',
   styleUrl: './customers.component.css',
 })
@@ -126,5 +127,26 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onSearch(event: Event) {
     this.search.set((event.target as HTMLInputElement).value);
+  }
+
+  deleteCustomer(id: number) {
+    if (!window.confirm(`ลบลูกค้า ${id} หรือไม่?`)) {
+      return;
+    }
+    
+    lastValueFrom(
+      this.http.delete<{ customer_id: number }>(`http://localhost:3000/customers/delete/${id}`)
+    )      .then(() => {
+        // Remove the deleted customer from the customers signal
+        this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
+      })
+      .catch((error: HttpErrorResponse) => {
+        console.error('Error deleting customer:', error);
+        if (error.status === 409) {
+          alert('ไม่สามารถลบลูกค้าได้ เนื่องจากมีออเดอร์ที่เกี่ยวข้องกับลูกค้านี้');
+        } else {
+          alert('เกิดข้อผิดพลาดในการลบลูกค้า');
+        }
+      });
   }
 }
