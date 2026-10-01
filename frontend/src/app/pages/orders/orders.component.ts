@@ -1,11 +1,10 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { lastValueFrom, forkJoin } from 'rxjs';
 import { getOrdersResponse } from '../../../../models/get-orders-res';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
 
 export interface OrderWithItems extends getOrdersResponse {
-  totalQuantity?: number;
   customer?: getCustomersResponse;
 }
 
@@ -20,7 +19,6 @@ export class OrdersComponent implements OnInit {
   private http = inject(HttpClient);
 
   orders = signal<OrderWithItems[]>([]);
-
   totalQty = computed(() =>
     this.orders().reduce((sum, order) => sum + order.qty, 0)
   );
@@ -59,7 +57,6 @@ export class OrdersComponent implements OnInit {
         return {
           ...order,
           customer: customer,
-          totalQuantity: order.qty,
         };
       });
 
@@ -67,5 +64,33 @@ export class OrdersComponent implements OnInit {
     } catch (error) {
       console.error('Error fetching data:', error);
     }
+  }
+
+  deleteOrder(id: number) {
+    if (!window.confirm(`ลบออเดอร์ ${id} หรือไม่?`)) {
+      return;
+    }
+
+    lastValueFrom(
+      this.http.delete<{ order_id: number }>(`http://localhost:3000/orders/delete/${id}`)
+    )
+      .then(() => {
+        this.orders.update((orders) => orders.filter((order) => order.order_id !== id));
+      })
+      .catch((error: unknown) => {
+        if (error instanceof HttpErrorResponse) {
+          console.error('Error deleting order:', {
+            status: error.status,
+            message: error.message,
+            response: error.error,
+          });
+          const message = error.error?.error ?? `ลบออเดอร์ไม่สำเร็จ (HTTP ${error.status})`;
+          window.alert(message);
+          return;
+        }
+
+        console.error('Error deleting order:', error);
+        window.alert('ลบออเดอร์ไม่สำเร็จ');
+      });
   }
 }
