@@ -7,7 +7,6 @@ import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
 
-// จุดศูนย์กลาง มมส. (ปรับพิกัดให้ตรงตามต้องการ)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 
 @Component({
@@ -40,7 +39,6 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
 
   constructor() {
-    // วาดหมุดใหม่ทุกครั้งที่รายชื่อ (หลังค้นหา/โหลดข้อมูล) เปลี่ยน
     effect(() => {
       const list = this.filteredCustomers();
       if (this.map) this.renderMarkers(list);
@@ -67,6 +65,19 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
       fillOpacity: 0.08,
     }).addTo(this.map);
 
+    const shopIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [15, 25],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+
+    L.marker(MSU_CENTER, { icon: shopIcon })
+      .bindPopup('<b>📍 ร้านค้า (จุดศูนย์กลางบริการ)</b>')
+      .addTo(this.map);
+
     this.markers.addTo(this.map);
     this.renderMarkers(this.filteredCustomers());
 
@@ -74,6 +85,8 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resizeObserver = new ResizeObserver(() => this.map?.invalidateSize());
     this.resizeObserver.observe(this.mapEl().nativeElement);
   }
+
+
 
   ngOnDestroy() {
     this.resizeObserver?.disconnect();
@@ -83,14 +96,14 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   private renderMarkers(list: getCustomersResponse[]) {
     this.markers.clearLayers();
 
-    list.forEach((c, i) => {
+    list.forEach((c) => {
       const popup = document.createElement('div');
       popup.textContent = `${c.name} (${c.phone})`; // textContent กัน XSS
 
       L.marker([c.latitude, c.longitude], {
         icon: L.divIcon({
           className: '',
-          html: `<div class="num-pin">${i + 1}</div>`,
+          html: `<div class="num-pin">${c.customer_id}</div>`,
           iconSize: [28, 28],
           iconAnchor: [14, 14],
         }),
