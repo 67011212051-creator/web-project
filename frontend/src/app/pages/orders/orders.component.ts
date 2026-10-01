@@ -33,6 +33,11 @@ export class OrdersComponent implements OnInit {
     return map;
   });
 
+  avgQty = computed(() => {
+    const count = this.orders().length;
+    return count ? this.totalQty() / count : 0;
+  });
+
   ngOnInit() {
     this.callApi();
   }
