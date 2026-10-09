@@ -6,6 +6,8 @@ import { router as customers } from "./controller/customers";
 
 export const app = express();
 
+app.use(express.json());
+
 // 2. เปิดใช้งาน CORS (แนะนำระบุ origin ที่อนุญาต หรือใช้ cors() เพื่อปลดล็อกทุก domain ในช่วง dev)
 app.use(cors({
   origin: 'http://localhost:4200'

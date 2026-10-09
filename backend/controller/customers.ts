@@ -31,6 +31,11 @@ router.delete("/delete/:id", async (req, res) => {
 });
 
 router.post("/add", async (req, res) => {
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    res.status(400).json({ error: "Request body must be a JSON object" });
+    return;
+  }
+
   const { name, phone, latitude, longitude } = req.body;
 
   const { data, error } = await dbconnect.from("customers")
@@ -54,6 +59,12 @@ router.post("/add", async (req, res) => {
 
 router.put("/update/:id", async (req, res) => {
   const customerId = Number(req.params.id);
+
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    res.status(400).json({ error: "Request body must be a JSON object" });
+    return;
+  }
+
   const { name, phone, latitude, longitude } = req.body;
 
   const { data, error } = await dbconnect.from("customers")

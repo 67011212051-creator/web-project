@@ -88,13 +88,14 @@ router.delete("/deleteByCustomerId/:customerId", async (req, res) => {
 });
 
 router.post("/add", async (req, res) => {
-  const { customer_id, order_date, status } = req.body;
+  const { customer_id, order_date, delivery_fee, qty } = req.body;
   const { data, error } = await dbconnect.from("orders")
     .insert([
       {
         customer_id,
         order_date,
-        status
+        delivery_fee,
+        qty
       }
     ])
     .select();
@@ -109,13 +110,14 @@ router.post("/add", async (req, res) => {
 
 router.put("/update/:id", async (req, res) => {
   const orderId = Number(req.params.id);
-  const { customer_id, order_date, status } = req.body;
+  const { customer_id, order_date, delivery_fee, qty } = req.body;
 
   const { data, error } = await dbconnect.from("orders")
     .update({
       customer_id,
       order_date,
-      status
+      delivery_fee,
+      qty
     })
     .eq("order_id", orderId)
     .select();
