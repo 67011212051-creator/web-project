@@ -135,16 +135,20 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     
     lastValueFrom(
-      this.http.delete<{ customer_id: number }>(`http://localhost:3000/customers/delete/${id}`)
-    )      .then(() => {
-        // Remove the deleted customer from the customers signal
-        this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
-      })
-      .catch((error: HttpErrorResponse) => {
-        console.error('Error deleting customer:', error);
-        if (error.status === 409) {
-          alert('ไม่สามารถลบลูกค้าได้ เนื่องจากมีออเดอร์ที่เกี่ยวข้องกับลูกค้านี้');
-        } else {
+      this.http.delete<{ customer_id: number }>(`http://localhost:3000/orders/deleteByCustomerId/${id}`)
+    ).then(() => {
+      return lastValueFrom(
+        this.http.delete<{ customer_id: number }>(`http://localhost:3000/customers/delete/${id}`)
+      );
+    }).then(() => {
+      // Remove the deleted customer from the customers signal
+      this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
+    })
+    .catch((error: HttpErrorResponse) => {
+      console.error('Error deleting customer:', error);
+      if (error.status === 409) {
+        alert('ไม่สามารถลบลูกค้าได้ เนื่องจากมีออเดอร์ที่เกี่ยวข้องกับลูกค้านี้');
+      } else {
           alert('เกิดข้อผิดพลาดในการลบลูกค้า');
         }
       });
