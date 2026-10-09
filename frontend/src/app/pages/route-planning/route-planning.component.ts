@@ -169,7 +169,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.isSaving = true;
 
     try {
-      // ส่ง payload ใบงานไปยัง Backend API เพื่อบันทึกลง Database
       await lastValueFrom(
         this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, {
           jobSheets: this.jobSheets
@@ -274,6 +273,8 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         currentLoc = [selected.customer!.latitude, selected.customer!.longitude];
       }
 
+      if (stops.length === 0) break;
+
       const deliveryCost = CONFIG.RIDER_BASE_FEE + (currentDistance * currentBoxes * CONFIG.FUEL_RATE_PER_KM_BOX);
       const sales = currentBoxes * CONFIG.PRICE_PER_BOX;
       const foodCost = currentBoxes * CONFIG.FOOD_COST_PER_BOX;
@@ -356,7 +357,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         }
       });
 
-      // ดึงเส้นทางจริงตามถนนจาก OSRM
       if (waypoints.length > 1) {
         try {
           const coordString = waypoints.map(pt => `${pt[1]},${pt[0]}`).join(';');
@@ -385,22 +385,49 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   // --- 5. Backend HTTP Calls ---
   private async loadOrders(): Promise<Order[]> {
     try {
-      const data = await lastValueFrom(
-        this.http.get<Order[]>(`${API_BASE_URL}/orders`)
+      const ordersData = await lastValueFrom(
+        this.http.get<any[]>(`${API_BASE_URL}/orders`)
       );
-      if (data && data.length > 0) return data;
+
+      if (ordersData && ordersData.length > 0) {
+        // หาก orders ขาดข้อมูล customer ให้ดึงรายชื่อลูกค้าจาก /customers มาจับคู่
+        const needJoin = ordersData.some(o => !o.customer && (!o.latitude || !o.longitude));
+        let customersMap = new Map<number, Customer>();
+
+        if (needJoin) {
+          try {
+            const customersData = await lastValueFrom(
+              this.http.get<Customer[]>(`${API_BASE_URL}/customers`)
+            );
+            customersData.forEach(c => customersMap.set(c.customer_id, c));
+          } catch (e) {
+            console.warn('Could not fetch /customers to join with orders:', e);
+          }
+        }
+
+        return ordersData.map(o => {
+          const matchedCust = customersMap.get(o.customer_id);
+          return {
+            order_id: o.order_id,
+            customer_id: o.customer_id,
+            delivery_fee: o.delivery_fee,
+            qty: o.qty,
+            date: o.date,
+            customer: o.customer || matchedCust || {
+              customer_id: o.customer_id,
+              name: o.name || 'ลูกค้า',
+              phone: o.phone || '-',
+              latitude: Number(o.latitude),
+              longitude: Number(o.longitude)
+            }
+          };
+        });
+      }
     } catch (err) {
       console.warn('Backend /orders failed, using fallback:', err);
     }
 
-    // ข้อมูลสำรองกรณีรัน backend ออฟไลน์
-    return [
-      { order_id: 1, customer_id: 3, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 3, name: 'คุณณัฐณิชา วงศ์คำ', phone: '095-148-3356', latitude: 16.254242, longitude: 103.240783 } },
-      { order_id: 2, customer_id: 4, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 4, name: 'คุณธนกร ศรีบุญเรือง', phone: '086-552-4108', latitude: 16.248976, longitude: 103.259183 } },
-      { order_id: 3, customer_id: 5, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 5, name: 'คุณพิมพ์ชนก ใจดี', phone: '092-883-7124', latitude: 16.243858, longitude: 103.256836 } },
-      { order_id: 4, customer_id: 7, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 7, name: 'phanuwat', phone: '1234567890', latitude: 16.2541909, longitude: 103.2406816 } },
-      { order_id: 5, customer_id: 9, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 9, name: 'test test', phone: '088-888-8888', latitude: 16.2480946, longitude: 103.2531595 } }
-    ];
+    return this.getMockOrders();
   }
 
   private async loadRiders(): Promise<Rider[]> {
@@ -470,5 +497,15 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       netProfit: Math.round(netProfit * 100) / 100,
       estimatedFinishTime: `${finishDate.getHours()}:${formattedMinutes} น.`
     };
+  }
+
+  private getMockOrders(): Order[] {
+    return [
+      { order_id: 1, customer_id: 3, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 3, name: 'คุณณัฐณิชา วงศ์คำ', phone: '095-148-3356', latitude: 16.254242, longitude: 103.240783 } },
+      { order_id: 2, customer_id: 4, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 4, name: 'คุณธนกร ศรีบุญเรือง', phone: '086-552-4108', latitude: 16.248976, longitude: 103.259183 } },
+      { order_id: 3, customer_id: 5, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 5, name: 'คุณพิมพ์ชนก ใจดี', phone: '092-883-7124', latitude: 16.243858, longitude: 103.256836 } },
+      { order_id: 4, customer_id: 7, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 7, name: 'phanuwat', phone: '1234567890', latitude: 16.2541909, longitude: 103.2406816 } },
+      { order_id: 5, customer_id: 9, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 9, name: 'test test', phone: '088-888-8888', latitude: 16.2480946, longitude: 103.2531595 } }
+    ];
   }
 }
