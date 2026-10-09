@@ -7,13 +7,16 @@ import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
+import { CustomerModalComponent } from '../../components/customer-modal/customer-modal.component';
+import { environment } from '../../../environments/environment';
+
 
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 
 @Component({
   selector: 'app-customers',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CustomerModalComponent],
   templateUrl: './customers.component.html',
   styleUrl: './customers.component.css',
 })
@@ -22,6 +25,7 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
 
   customers = signal<getCustomersResponse[]>([]);
   search = signal('');
+  showModal = signal(false);
 
   // กรองตามชื่อหรือเบอร์โทร
   filteredCustomers = computed(() => {
@@ -51,10 +55,10 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.map = L.map(this.mapEl().nativeElement).setView(MSU_CENTER, 14);
+    this.map = L.map(this.mapEl().nativeElement).setView(MSU_CENTER, 13);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20,
+      maxZoom: 17,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(this.map);
 
@@ -87,8 +91,6 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resizeObserver.observe(this.mapEl().nativeElement);
   }
 
-
-
   ngOnDestroy() {
     this.resizeObserver?.disconnect();
     this.map?.remove();
@@ -117,7 +119,7 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   async loadCustomers() {
     try {
       const data = await lastValueFrom(
-        this.http.get<getCustomersResponse[]>('http://localhost:3000/customers')
+        this.http.get<getCustomersResponse[]>(`${environment.apiUrl}/customers`)
       );
       this.customers.set(data);
     } catch (error) {
@@ -129,17 +131,22 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     this.search.set((event.target as HTMLInputElement).value);
   }
 
+  onCustomerSaved(customer: getCustomersResponse) {
+    this.customers.update((list) => [...list, customer]);
+    this.showModal.set(false);
+  }
+
   deleteCustomer(id: number) {
     if (!window.confirm(`ลบลูกค้า ${id} หรือไม่?`)) {
       return;
     }
-    
+
     lastValueFrom(
-      this.http.delete<{ customer_id: number }>(`http://localhost:3000/customers/delete/${id}`)
-    )      .then(() => {
-        // Remove the deleted customer from the customers signal
-        this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
-      })
+      this.http.delete<{ customer_id: number }>(`${environment.apiUrl}/customers/delete/${id}`)
+    ).then(() => {
+      // Remove the deleted customer from the customers signal
+      this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
+    })
       .catch((error: HttpErrorResponse) => {
         console.error('Error deleting customer:', error);
         if (error.status === 409) {

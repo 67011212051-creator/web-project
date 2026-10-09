@@ -4,18 +4,14 @@
       <h1>จัดการข้อมูลลูกค้า</h1>
       <p class="sub">บันทึกที่อยู่และพิกัดสำหรับวางแผนส่งอาหารในรัศมี 3 กม. รอบ มมส</p>
     </div>
-    <button class="btn btn-primary">+ เพิ่มลูกค้า</button>
+    <button class="btn btn-primary" (click)="showModal.set(true)">+ เพิ่มลูกค้า</button>
   </header>
 
   <div class="content-grid">
     <div class="card table-card">
       <div class="table-header">
         <div>ลูกค้าทั้งหมด {{ filteredCustomers().length }} คน</div>
-        <input
-          type="text"
-          placeholder="🔍 ค้นหาชื่อหรือเบอร์โทร"
-          (input)="onSearch($event)"
-        />
+        <input type="text" placeholder="🔍 ค้นหาชื่อหรือเบอร์โทร" (input)="onSearch($event)" />
       </div>
 
       <table>
@@ -29,17 +25,19 @@
         </thead>
         <tbody>
           @for (c of filteredCustomers(); track c.customer_id) {
-            <tr>
-              <td>{{ c.name }}</td>
-              <td>{{ c.phone }}</td>
-              <td>{{ c.latitude }}, {{ c.longitude }}</td>
-              <td class="actions">
-                <button class="btn-icon">✎</button>
-                <button class="btn-icon-danger" (click)="deleteCustomer(c.customer_id)">🗑</button>
-              </td>
-            </tr>
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.phone }}</td>
+            <td>{{ c.latitude }}, {{ c.longitude }}</td>
+            <td class="actions">
+              <button class="btn-icon">✎</button>
+              <button class="btn-icon-danger" (click)="deleteCustomer(c.customer_id)">🗑</button>
+            </td>
+          </tr>
           } @empty {
-            <tr><td colspan="4">ไม่พบข้อมูลลูกค้า</td></tr>
+          <tr>
+            <td colspan="4">ไม่พบข้อมูลลูกค้า</td>
+          </tr>
           }
         </tbody>
       </table>
@@ -53,4 +51,7 @@
       </div>
     </div>
   </div>
+  @if (showModal()) {
+  <app-customer-modal (close)="showModal.set(false)" (saved)="onCustomerSaved($event)" />
+  }
 </div>

@@ -7,6 +7,32 @@
   justify-content: center;
   margin-bottom: 10px;
 }
-.pin { font-size: 28px; }
-.loc-btn { width: 100%; margin-bottom: 6px; }
-.required-hint { color: var(--color-primary-dark); margin-bottom: 4px; }
+
+.pin {
+  font-size: 28px;
+}
+
+.loc-btn {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.required-hint {
+  color: var(--color-primary-dark);
+  margin-bottom: 4px;
+
+  .map-preview {
+    width: 100%;
+    height: 260px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 8px 0;
+    cursor: crosshair;
+  }
+
+  :host ::ng-deep .pick-pin {
+    font-size: 28px;
+    line-height: 28px;
+    text-align: center;
+  }
+}
