@@ -7,6 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
+import { environment } from '../../../environments/environment';
 
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 
@@ -135,12 +136,12 @@ export class CustomerModalComponent implements AfterViewInit, OnDestroy {
     this.saving.set(true);
     this.errorMsg.set('');
     try {
-      const created = await lastValueFrom(
-        this.http.post<getCustomersResponse>('http://localhost:3000/customers', {
+      const res = await lastValueFrom(
+        this.http.post<getCustomersResponse[]>(`${environment.apiUrl}/customers/add`, {
           name, phone, latitude: lat, longitude: lng,
         })
       );
-      this.saved.emit(created);
+      this.saved.emit(res[0]);
     } catch (e) {
       console.error('Error creating customer:', e);
       this.errorMsg.set(
