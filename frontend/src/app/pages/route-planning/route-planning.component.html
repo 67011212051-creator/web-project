@@ -5,62 +5,117 @@
       <p class="sub">รอบส่งด่วนมื้อเที่ยง · ต้องส่งครบภายใน 12:30 น.</p>
     </div>
     <div class="header-actions">
-      <button class="btn btn-secondary">↻ คำนวณใหม่</button>
-      <button class="btn btn-primary">▤ คำนวณเส้นทาง</button>
+      <!-- ปุ่มคำนวณใหม่ -->
+      <button 
+        type="button"
+        class="btn btn-secondary" 
+        (click)="onRecalculateRoutes()" 
+        [disabled]="!isCalculated || isLoading || isSaving">
+        ↻ คำนวณใหม่
+      </button>
+
+      <!-- ปุ่มคำนวณเส้นทาง -->
+      <button 
+        type="button"
+        class="btn btn-primary" 
+        (click)="onCalculateRoutes()" 
+        [disabled]="isCalculated || isLoading || isSaving">
+        <span *ngIf="!isLoading">▤ คำนวณเส้นทาง</span>
+        <span *ngIf="isLoading">กำลังประมวลผล...</span>
+      </button>
+
+      <!-- ปุ่มยืนยันจ่ายงาน -->
+      <button 
+        type="button"
+        class="btn btn-success" 
+        *ngIf="isCalculated"
+        (click)="onConfirmDispatch()" 
+        [disabled]="isSaving || isDispatched">
+        <span *ngIf="!isSaving && !isDispatched">✓ ยืนยันจ่ายงาน</span>
+        <span *ngIf="isSaving">กำลังบันทึก...</span>
+        <span *ngIf="isDispatched">จ่ายงานแล้ว</span>
+      </button>
     </div>
   </header>
 
-  <div class="result-bar">
-    <div><span class="dot"></span> คำนวณสำเร็จ · 6 ออเดอร์ แบ่งให้ 3 ไรเดอร์</div>
-    <div>คาดว่าส่งครบ 12:17 น. ✓ ทันเวลา</div>
+  <!-- แถบแจ้งผลการคำนวณ -->
+  <div class="result-bar" *ngIf="isCalculated">
+    <div>
+      <span class="dot"></span> คำนวณสำเร็จ · {{ summary.totalOrders }} ออเดอร์ แบ่งให้ {{ summary.totalRiders }} ไรเดอร์
+    </div>
+    <div>คาดว่าส่งครบ {{ summary.estimatedFinishTime }} ✓ ทันเวลา</div>
   </div>
 
   <div class="content-grid">
     <div class="card map-card">
       <div class="legend">
-        <div class="legend-item"><span class="swatch" style="background:#e05a4c"></span> ไรเดอร์คนที่ 1</div>
-        <div class="legend-item"><span class="swatch" style="background:#2fa361"></span> ไรเดอร์คนที่ 2</div>
-        <div class="legend-item"><span class="swatch" style="background:#3a7bd5"></span> ไรเดอร์คนที่ 3</div>
+        <ng-container *ngIf="isCalculated">
+          <div class="legend-item" *ngFor="let job of jobSheets; let idx = index">
+            <span class="swatch" [style.background]="job.rider?.route_color || '#3a7bd5'"></span>
+            ไรเดอร์คนที่ {{ idx + 1 }} ({{ job.rider?.rider_code }})
+          </div>
+        </ng-container>
+        <span *ngIf="!isCalculated" style="color: #888; font-size: 13px;">
+          กรุณากดคำนวณเส้นทางเพื่อดูผลการจัดสายบนแผนที่
+        </span>
       </div>
+
+      <!-- คอนเทนเนอร์แผนที่ Leaflet -->
       <div class="map-area">
-        <div class="store-pin">🏪</div>
-        <div class="route-pin" style="background:#e05a4c; top: 20%; left: 15%;">1</div>
-        <div class="route-pin" style="background:#2fa361; top: 42%; left: 40%;">2</div>
-        <div class="route-pin" style="background:#3a7bd5; top: 64%; left: 65%;">3</div>
+        <div #mapEl style="width: 100%; height: 100%;"></div>
       </div>
+
       <div class="map-caption">คิดค่าส่ง 2 บาท/กม./กล่อง · ค่าเรียกไรเดอร์ 15 บาท/ครั้ง · ความเร็วเฉลี่ย 30 กม./ชม.</div>
     </div>
 
     <div class="side-col">
+      <!-- Card สรุปค่าใช้จ่าย -->
       <div class="card cost-card">
         <h3>ภาพรวมค่าใช้จ่าย</h3>
-        <div class="cost-row"><span>รายได้ (9 × ฿65)</span><span>฿585</span></div>
-        <div class="cost-row"><span>ต้นทุนอาหาร (9 × ฿40)</span><span>- ฿360</span></div>
-        <div class="cost-row"><span>ค่าน้ำมัน (11.3 กม.)</span><span>- ฿22.6</span></div>
-        <div class="cost-row"><span>ค่าไรเดอร์ (3 ครั้ง)</span><span>- ฿45</span></div>
-        <div class="cost-row total"><span>กำไรสุทธิ</span><span>฿157.40</span></div>
+        <div class="cost-row">
+          <span>รายได้ ({{ summary.totalBoxes }} × ฿65)</span>
+          <span>฿{{ summary.sales }}</span>
+        </div>
+        <div class="cost-row">
+          <span>ต้นทุนอาหาร ({{ summary.totalBoxes }} × ฿40)</span>
+          <span>- ฿{{ summary.foodCost }}</span>
+        </div>
+        <div class="cost-row">
+          <span>ค่าน้ำมัน ({{ summary.totalDistanceKm }} กม.)</span>
+          <span>- ฿{{ summary.deliveryDistanceCost }}</span>
+        </div>
+        <div class="cost-row">
+          <span>ค่าไรเดอร์ ({{ summary.totalRiders }} ครั้ง)</span>
+          <span>- ฿{{ summary.riderBaseCost }}</span>
+        </div>
+        <div class="cost-row total">
+          <span>กำไรสุทธิ</span>
+          <span>฿{{ summary.netProfit | number:'1.2-2' }}</span>
+        </div>
       </div>
 
+      <!-- Card เวลารวม -->
       <div class="card time-card">
         <span>เวลาจัดส่งทั้งหมด</span>
-        <strong>47 นาที</strong>
+        <strong>{{ summary.maxDurationMin }} นาที</strong>
       </div>
 
+      <!-- Card รายชื่อไรเดอร์ -->
       <div class="card rider-list-card">
-        <div class="rider-row">
-          <div class="rider-title"><span class="swatch" style="background:#e05a4c"></span> ไรเดอร์คนที่ 1</div>
-          <div class="rider-dist">4.8 กม.</div>
-          <div class="rider-detail">3 ออเดอร์ · 5 กล่อง · ไม่เกิน 3 ออเดอร์</div>
-        </div>
-        <div class="rider-row">
-          <div class="rider-title"><span class="swatch" style="background:#2fa361"></span> ไรเดอร์คนที่ 2</div>
-          <div class="rider-dist">3.9 กม.</div>
-          <div class="rider-detail">2 ออเดอร์ · 3 กล่อง · ไม่เกิน 3 ออเดอร์</div>
-        </div>
-        <div class="rider-row">
-          <div class="rider-title"><span class="swatch" style="background:#3a7bd5"></span> ไรเดอร์คนที่ 3</div>
-          <div class="rider-dist">2.6 กม.</div>
-          <div class="rider-detail">1 ออเดอร์ · 1 กล่อง · ไม่เกิน 3 ออเดอร์</div>
+        <ng-container *ngIf="isCalculated && jobSheets.length > 0">
+          <div class="rider-row" *ngFor="let job of jobSheets; let idx = index">
+            <div class="rider-title">
+              <span class="swatch" [style.background]="job.rider?.route_color || '#3a7bd5'"></span>
+              ไรเดอร์คนที่ {{ idx + 1 }}
+            </div>
+            <div class="rider-dist">{{ job.distance_km }} กม.</div>
+            <div class="rider-detail">
+              {{ job.total_orders }} ออเดอร์ · {{ job.total_boxes }} กล่อง · ไม่เกิน 3 ออเดอร์
+            </div>
+          </div>
+        </ng-container>
+        <div *ngIf="!isCalculated" style="color: #999; text-align: center; padding: 20px 0; font-size: 14px;">
+          ยังไม่มีข้อมูลเส้นทาง
         </div>
       </div>
     </div>

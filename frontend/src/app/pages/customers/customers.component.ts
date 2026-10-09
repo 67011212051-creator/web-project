@@ -54,7 +54,7 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     this.map = L.map(this.mapEl().nativeElement).setView(MSU_CENTER, 14);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 13,
+      maxZoom: 20,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(this.map);
 
