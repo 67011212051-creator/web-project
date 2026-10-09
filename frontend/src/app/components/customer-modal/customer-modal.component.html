@@ -1,39 +1,43 @@
-<div class="modal-overlay">
-  <div class="modal">
+<div class="modal-overlay" (click)="close.emit()">
+  <div class="modal" (click)="$event.stopPropagation()">
     <h2>เพิ่มลูกค้า</h2>
     <p class="sub">กรอกข้อมูลที่จำเป็นสำหรับจัดส่งและวางแผนเส้นทาง</p>
 
     <div class="field">
       <label>ชื่อลูกค้า *</label>
-      <input type="text" value="คุณสมหญิง ใจดี" placeholder="เช่น คุณสมหญิง ใจดี" />
+      <input type="text" placeholder="เช่น คุณสมหญิง ใจดี" [ngModel]="name()" (ngModelChange)="name.set($event)" />
     </div>
 
     <div class="field">
       <label>เบอร์โทรศัพท์ *</label>
-      <input type="text" value="089-245-7812" placeholder="0XX-XXX-XXXX" />
+      <input type="text" placeholder="0XX-XXX-XXXX" [ngModel]="phone()" (ngModelChange)="phone.set($event)" />
       <div class="hint">กรอกหมายเลข 10 หลัก</div>
     </div>
 
     <div class="field">
       <label>ละติจูด *</label>
-      <input type="text" value="16.2458" placeholder="16.2467" />
+      <input type="text" placeholder="16.2467" [ngModel]="latitude()" (ngModelChange)="latitude.set($event)" />
     </div>
 
     <div class="field">
       <label>ลองจิจูด *</label>
-      <input type="text" value="103.2506" placeholder="103.2519" />
+      <input type="text" placeholder="103.2519" [ngModel]="longitude()" (ngModelChange)="longitude.set($event)" />
     </div>
 
-    <div class="map-preview">
-      <div class="pin">📍</div>
-    </div>
-    <button class="btn btn-secondary loc-btn">◎ ใช้ตำแหน่งปัจจุบัน</button>
+    <div class="map-preview" #mapEl></div>
+    <div class="hint">คลิกบนแผนที่เพื่อเลือกตำแหน่งจัดส่ง</div>
+    <button type="button" class="btn btn-secondary loc-btn" (click)="useCurrentLocation()">◎ ใช้ตำแหน่งปัจจุบัน</button>
 
     <div class="hint required-hint">* จำเป็นต้องระบุ เบอร์โทร และพิกัดให้ครบ</div>
+    @if (errorMsg()) {
+    <div class="hint" style="color:#c0392b;">{{ errorMsg() }}</div>
+    }
 
     <div class="modal-actions">
-      <button class="btn btn-secondary">ยกเลิก</button>
-      <button class="btn btn-primary">บันทึกลูกค้า</button>
+      <button class="btn btn-secondary" (click)="close.emit()">ยกเลิก</button>
+      <button class="btn btn-primary" [disabled]="saving()" (click)="onSave()">
+        {{ saving() ? 'กำลังบันทึก...' : 'บันทึกลูกค้า' }}
+      </button>
     </div>
   </div>
 </div>

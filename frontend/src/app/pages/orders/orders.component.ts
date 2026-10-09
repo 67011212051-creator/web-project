@@ -3,7 +3,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { lastValueFrom, forkJoin } from 'rxjs';
 import { getOrdersResponse } from '../../../../models/get-orders-res';
 import { getCustomersResponse } from '../../../../models/get_customers_res';
-
+import { environment } from '../../../environments/environment';
 export interface OrderWithItems extends getOrdersResponse {
   customer?: getCustomersResponse;
 }
@@ -44,8 +44,8 @@ export class OrdersComponent implements OnInit {
     try {
       const [ordersData, customersData] = await lastValueFrom(
         forkJoin([
-          this.http.get<getOrdersResponse[]>('http://localhost:3000/orders'),
-          this.http.get<getCustomersResponse[]>('http://localhost:3000/customers'),
+          this.http.get<getOrdersResponse[]>(`${environment.apiUrl}/orders`),
+          this.http.get<getCustomersResponse[]>(`${environment.apiUrl}/customers`),
         ])
       );
 
@@ -72,7 +72,7 @@ export class OrdersComponent implements OnInit {
     }
 
     lastValueFrom(
-      this.http.delete<{ order_id: number }>(`http://localhost:3000/orders/delete/${id}`)
+      this.http.delete<{ order_id: number }>(`${environment.apiUrl}/orders/delete/${id}`)
     )
       .then(() => {
         this.orders.update((orders) => orders.filter((order) => order.order_id !== id));
