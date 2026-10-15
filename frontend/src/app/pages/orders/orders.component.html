@@ -66,7 +66,7 @@
   </div>
 
   @if (showModal()) {
-  <app-order-modal [customers]="customers()" (closed)="showModal.set(false)" (saved)="onOrderSaved()" />
+  <app-order-modal [customers]="customersForAdd()" (closed)="showModal.set(false)" (saved)="onOrderSaved()" />
 
 
   }
@@ -77,11 +77,7 @@
   }
 
   @if (editingOrder(); as order) {
-  <app-edit-order-dialog
-    [order]="order"
-    [customers]="customers()"
-    (closed)="editingOrder.set(null)"
-    (saved)="onOrderEdited()"
-  />
-}
+  <app-edit-order-dialog [order]="order" [customers]="customersForEdit()" (closed)="editingOrder.set(null)"
+    (saved)="onOrderEdited()" />
+  }
 </div>
