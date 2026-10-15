@@ -3,6 +3,7 @@ import cors from 'cors' // 1. import cors
 import { router as index } from "./controller/index";
 import { router as orders } from "./controller/orders";
 import { router as customers } from "./controller/customers";
+import { router as job_sheets } from "./controller/job-sheets";
 
 export const app = express();
 
@@ -16,6 +17,7 @@ app.use(cors({
 app.use("/", index);
 app.use("/orders", orders);
 app.use("/customers", customers);
+app.use("/job-sheets", job_sheets);
 
 // เปลี่ยนจาก app.use เป็น app.get เพื่อไม่ให้ไปทับ HTTP method อื่นๆ
 app.get("/", (_req, res) => {
