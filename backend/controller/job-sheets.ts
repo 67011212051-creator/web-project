@@ -130,10 +130,64 @@ router.delete("/delete/:id", async (req, res) => {
 })
 
 router.post("/dispatch", async (req, res) => {
-  const { jobSheets, riders } = req.body;
+  const { jobSheets, riders } = req.body ?? {};
 
-  if (!Array.isArray(jobSheets) || jobSheets.length === 0) {
-    res.status(400).json({ error: "Invalid job sheets data" });
+  if (
+    !Array.isArray(jobSheets) ||
+    jobSheets.length === 0 ||
+    !Array.isArray(riders) ||
+    riders.length === 0 ||
+    riders.some((rider: any) =>
+      !rider ||
+      typeof rider.rider_code !== "string" ||
+      typeof rider.route_color !== "string"
+    )
+  ) {
+    res.status(400).json({ error: "Invalid job sheets or riders data" });
+    return;
+  }
+
+  const riderCodes = new Set(riders.map((rider: any) => rider.rider_code));
+  if (
+    jobSheets.some((jobSheet: any) =>
+      !jobSheet ||
+      typeof jobSheet.job_code !== "string" ||
+      !jobSheet.rider ||
+      !riderCodes.has(jobSheet.rider.rider_code) ||
+      !Array.isArray(jobSheet.stops)
+    )
+  ) {
+    res.status(400).json({ error: "Invalid job sheet or unknown rider reference" });
+    return;
+  }
+
+  const { error: stopsDeleteError } = await dbconnect
+    .from("job_stops")
+    .delete()
+    .not("job_id", "is", null);
+
+  if (stopsDeleteError) {
+    res.status(500).json({ error: stopsDeleteError.message });
+    return;
+  }
+
+  const { error: sheetsDeleteError } = await dbconnect
+    .from("job_sheets")
+    .delete()
+    .not("job_id", "is", null);
+
+  if (sheetsDeleteError) {
+    res.status(500).json({ error: sheetsDeleteError.message });
+    return;
+  }
+
+  const { error: ridersDeleteError } = await dbconnect
+    .from("riders")
+    .delete()
+    .not("rider_id", "is", null);
+
+  if (ridersDeleteError) {
+    res.status(500).json({ error: ridersDeleteError.message });
     return;
   }
 
