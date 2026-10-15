@@ -6,13 +6,11 @@ import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
-// ปรับจำนวน ../ ให้ตรงกับตำแหน่งไฟล์จริงของคุณ
-import { environment } from '../../../environments/environment';
-import { getCustomersResponse } from '../../../../models/get-customers-res';
-import { Order, Rider, JobStop, JobSheet } from '../../../../models/route-planning-res';
 
 // พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
+const API_BASE_URL = 'http://localhost:3000';
+
 
 const CONFIG = {
   SPEED_KMH: 30,
@@ -24,6 +22,56 @@ const CONFIG = {
   FUEL_RATE_PER_KM_BOX: 2,
   MAX_DELIVERY_MIN: 60
 };
+
+export interface Customer {
+  customer_id: number;
+  name: string;
+  phone: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface Order {
+  order_id: number;
+  customer_id: number;
+  delivery_fee: number;
+  qty: number;
+  date: string;
+  customer?: Customer;
+}
+
+export interface Rider {
+  rider_id: number;
+  rider_code: string;
+  route_color: string;
+  max_orders?: number;
+}
+
+export interface JobStop {
+  order_id: number;
+  stop_seq: number;
+  distance_km: number;
+  travel_time_min: number;
+  delivery_time_min: number;
+  latitude: number;
+  longitude: number;
+  order?: Order;
+}
+
+export interface JobSheet {
+  job_code: string;
+  rider_id: number;
+  rider?: Rider;
+  distance_km: number;
+  duration_min: number;
+  rider_pay: number;
+  total_boxes: number;
+  total_orders: number;
+  sales: number;
+  food_cost: number;
+  net_profit: number;
+  stops: JobStop[];
+}
 
 @Component({
   selector: 'app-route-planning',
@@ -123,7 +171,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     try {
       await lastValueFrom(
-        this.http.post(`${environment.apiUrl}/job-sheets/dispatch`, {
+        this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, {
           jobSheets: this.jobSheets
         })
       );
@@ -171,11 +219,18 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     let riderIndex = 0;
 
     while (unassigned.length > 0) {
-      const currentRider = availableRiders[riderIndex % availableRiders.length] || {
+      const baseRider = availableRiders[riderIndex % availableRiders.length] || {
         rider_id: riderIndex + 1,
         rider_code: `RD${String(riderIndex + 1).padStart(2, '0')}`,
-        route_color: '#3a7bd5',
+        route_color: ROUTE_COLORS[riderIndex % ROUTE_COLORS.length],
         max_orders: 3
+      };
+
+      // กำหนดสีแยกเฉพาะให้แต่ละสายส่ง (ไม่ซ้ำสีกันแม้ไรเดอร์วิ่งหลายรอบ)
+      const distinctColor = ROUTE_COLORS[riderIndex % ROUTE_COLORS.length];
+      const currentRider: Rider = {
+        ...baseRider,
+        route_color: distinctColor
       };
 
       let currentLoc: [number, number] = [MSU_CENTER[0], MSU_CENTER[1]];
@@ -258,7 +313,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     return jobSheets;
   }
 
-// --- 4. วาดเส้นตามถนนจริง OSRM (พร้อมขยับเส้นขนานกันไม่ให้ทับกัน) ---
+  // --- 4. วาดเส้นตามถนนจริง OSRM (ขนานเกาะแนวถนน ไม่หลุดเลน) ---
   private async renderRoutesOnMap(): Promise<void> {
     if (!this.map) return;
 
@@ -268,7 +323,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     for (let jobIdx = 0; jobIdx < totalRoutes; jobIdx++) {
       const job = this.jobSheets[jobIdx];
-      const routeColor = job.rider?.route_color || '#3a7bd5';
+      const routeColor = job.rider?.route_color || ROUTE_COLORS[jobIdx % ROUTE_COLORS.length];
       const waypoints: L.LatLngTuple[] = [MSU_CENTER];
 
       job.stops.forEach((stop) => {
@@ -323,23 +378,24 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
               (c: [number, number]) => [c[1], c[0]] as L.LatLngTuple
             );
 
-            // ขยับเส้นแต่ละสายให้ตีคู่ขนานกันตามลำดับไรเดอร์
             const offsetPoints = this.offsetRoadCoords(rawRoadPoints, jobIdx, totalRoutes);
 
             L.polyline(offsetPoints, {
               color: routeColor,
-              weight: 4.5,
-              opacity: 0.9
+              weight: 3.5,
+              opacity: 0.9,
+              lineJoin: 'round',
+              lineCap: 'round'
             })
-              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.distance_km} กม.)`)
+              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ระยะทาง: ${job.distance_km} กม.`)
               .addTo(this.routeLayerGroup);
           } else {
             const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
-            L.polyline(offsetWaypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
+            L.polyline(offsetWaypoints, { color: routeColor, weight: 3.5, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
           }
         } catch {
           const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
-          L.polyline(offsetWaypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
+          L.polyline(offsetWaypoints, { color: routeColor, weight: 3.5, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
         }
       }
     }
@@ -350,36 +406,79 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   /**
-   * คำนวณขยับพิกัดเส้นทางให้ตีคู่ขนานกัน (ไม่ทับกันเมื่อวิ่งบนถนนเส้นเดียวกัน)
+   * กรองจุดพิกัดที่อยู่ชิดกันเกินไปออก เพื่อป้องกันเส้นหักมุมเป็นฟันปลาเวลาขยับขนาน
+   */
+  private simplifyCoords(coords: L.LatLngTuple[], minDist = 0.00012): L.LatLngTuple[] {
+    if (coords.length <= 2) return coords;
+    const result: L.LatLngTuple[] = [coords[0]];
+
+    for (let i = 1; i < coords.length - 1; i++) {
+      const last = result[result.length - 1];
+      const dLat = coords[i][0] - last[0];
+      const dLng = coords[i][1] - last[1];
+      if (Math.sqrt(dLat * dLat + dLng * dLng) >= minDist) {
+        result.push(coords[i]);
+      }
+    }
+
+    result.push(coords[coords.length - 1]);
+    return result;
+  }
+
+  /**
+   * ขยับพิกัดเส้นทางให้ตีคู่ขนานกันภายในกรอบถนน ไม่บานออกนอกถนน
    */
   private offsetRoadCoords(coords: L.LatLngTuple[], routeIndex: number, totalRoutes: number): L.LatLngTuple[] {
     if (totalRoutes <= 1 || coords.length < 2) return coords;
 
-    // ระยะห่างระหว่างเส้น (ประมาณ 10 เมตรบนแผนที่)
-    const OFFSET_STEP = 0.00011;
-    const shift = (routeIndex - (totalRoutes - 1) / 2) * OFFSET_STEP;
+    const cleanCoords = this.simplifyCoords(coords);
 
-    if (shift === 0) return coords;
+    // ควบคุมความกว้างรวมทุกสายไม่ให้เกินความกว้างถนน (~4.5 เมตรซ้าย-ขวา)
+    const MAX_TOTAL_SPREAD = 0.00008;
+    const step = Math.min(0.000016, MAX_TOTAL_SPREAD / Math.max(1, totalRoutes - 1));
+    const shift = (routeIndex - (totalRoutes - 1) / 2) * step;
 
-    return coords.map((pt, i) => {
-      const prev = coords[i > 0 ? i - 1 : i];
-      const next = coords[i < coords.length - 1 ? i + 1 : i];
+    if (shift === 0) return cleanCoords;
 
-      const dLat = next[0] - prev[0];
-      const dLng = next[1] - prev[1];
-      const len = Math.sqrt(dLat * dLat + dLng * dLng);
-
-      if (len === 0) {
-        return [pt[0] + shift, pt[1] + shift] as L.LatLngTuple;
+    return cleanCoords.map((pt, i) => {
+      // จุดเริ่มต้น (ร้านค้า) และจุดส่งสุดท้าย ให้คงพิกัดใกล้หมุดจริง
+      if (i === 0 || i === cleanCoords.length - 1) {
+        return pt;
       }
 
-      // หาเวกเตอร์ตั้งฉาก (Normal Vector) เพื่อขยับเส้นออกด้านข้างของถนนอย่างสม่ำเสมอทุกโค้ง
-      const normLat = -dLng / len;
-      const normLng = dLat / len;
+      const prev = cleanCoords[i - 1];
+      const next = cleanCoords[i + 1];
+
+      const v1Lat = pt[0] - prev[0];
+      const v1Lng = pt[1] - prev[1];
+      const len1 = Math.sqrt(v1Lat * v1Lat + v1Lng * v1Lng) || 1;
+
+      const v2Lat = next[0] - pt[0];
+      const v2Lng = next[1] - pt[1];
+      const len2 = Math.sqrt(v2Lat * v2Lat + v2Lng * v2Lng) || 1;
+
+      // เวกเตอร์ตั้งฉากของช่วงก่อนหน้าและช่วงถัดไป
+      const n1Lat = -v1Lng / len1;
+      const n1Lng = v1Lat / len1;
+      const n2Lat = -v2Lng / len2;
+      const n2Lng = v2Lat / len2;
+
+      // เฉลี่ยทิศทางตั้งฉากที่มุมเลี้ยวให้โค้งมน ไม่พุ่งแหลม
+      let bisLat = n1Lat + n2Lat;
+      let bisLng = n1Lng + n2Lng;
+      const bisLen = Math.sqrt(bisLat * bisLat + bisLng * bisLng);
+
+      if (bisLen < 0.001) {
+        bisLat = n1Lat;
+        bisLng = n1Lng;
+      } else {
+        bisLat /= bisLen;
+        bisLng /= bisLen;
+      }
 
       return [
-        pt[0] + normLat * shift,
-        pt[1] + normLng * shift
+        pt[0] + bisLat * shift,
+        pt[1] + bisLng * shift
       ] as L.LatLngTuple;
     });
   }
@@ -388,18 +487,17 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   private async loadOrders(): Promise<Order[]> {
     try {
       const ordersData = await lastValueFrom(
-        this.http.get<any[]>(`${environment.apiUrl}/orders`)
+        this.http.get<any[]>(`${API_BASE_URL}/orders`)
       );
 
       if (ordersData && ordersData.length > 0) {
-        // หาก orders ขาดข้อมูล customer ให้ดึงรายชื่อลูกค้าจาก /customers มาจับคู่
         const needJoin = ordersData.some(o => !o.customer && (!o.latitude || !o.longitude));
-        let customersMap = new Map<number, getCustomersResponse>();
+        let customersMap = new Map<number, Customer>();
 
         if (needJoin) {
           try {
             const customersData = await lastValueFrom(
-              this.http.get<getCustomersResponse[]>(`${environment.apiUrl}/customers`)
+              this.http.get<Customer[]>(`${API_BASE_URL}/customers`)
             );
             customersData.forEach(c => customersMap.set(c.customer_id, c));
           } catch (e) {
@@ -411,7 +509,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           const matchedCust = customersMap.get(o.customer_id);
           return {
             order_id: o.order_id,
-            round_id: o.round_id,
             customer_id: o.customer_id,
             delivery_fee: o.delivery_fee,
             qty: o.qty,
@@ -436,7 +533,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   private async loadRiders(): Promise<Rider[]> {
     try {
       const data = await lastValueFrom(
-        this.http.get<Rider[]>(`${environment.apiUrl}/riders`)
+        this.http.get<Rider[]>(`${API_BASE_URL}/riders`)
       );
       if (data && data.length > 0) return data;
     } catch (err) {
@@ -445,8 +542,8 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     return [
       { rider_id: 1, rider_code: 'RD01', route_color: '#E63946', max_orders: 3 },
-      { rider_id: 2, rider_code: 'RD02', route_color: '#2A9D8F', max_orders: 3 },
-      { rider_id: 3, rider_code: 'RD03', route_color: '#457B9D', max_orders: 3 }
+      { rider_id: 2, rider_code: 'RD02', route_color: '#2563EB', max_orders: 3 },
+      { rider_id: 3, rider_code: 'RD03', route_color: '#10B981', max_orders: 3 }
     ];
   }
 
@@ -510,5 +607,28 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       { order_id: 4, customer_id: 7, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 7, name: 'phanuwat', phone: '1234567890', latitude: 16.2541909, longitude: 103.2406816 } },
       { order_id: 5, customer_id: 9, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 9, name: 'test test', phone: '088-888-8888', latitude: 16.2480946, longitude: 103.2531595 } }
     ];
+  }
+
+  /**
+   * สร้างสีไม่จำกัดจำนวนด้วย Golden Angle (137.508°) และคืนค่าเป็น HEX (#RRGGBB)
+   */
+  private getDistinctRouteColor(index: number): string {
+    const hue = (index * 137.508) % 360;
+    // สลับระดับความสดและความเข้มเล็กน้อยเพื่อให้แยกความต่างได้ง่ายขึ้นเมื่อมีหลายสิบสาย
+    const saturation = 75 + (index % 3) * 7; // 75%, 82%, 89%
+    const lightness = 40 + (index % 2) * 8;  // 40%, 48% (สีสดเข้ม เห็นชัดบนแผนที่สีอ่อน)
+    return this.hslToHex(hue, saturation, lightness);
+  }
+
+  private hslToHex(h: number, s: number, l: number): string {
+    s /= 100;
+    l /= 100;
+    const k = (n: number) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) =>
+      l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (x: number) =>
+      Math.round(x * 255).toString(16).padStart(2, '0');
+    return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
   }
 }
