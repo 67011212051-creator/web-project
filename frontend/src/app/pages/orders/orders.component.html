@@ -47,7 +47,7 @@
               {{ item.qty || 0 }} กล่อง
             </td>
             <td class="actions" data-label="จัดการ">
-              <button class="btn-icon" type="button" aria-label="แก้ไข">
+              <button class="btn-icon" type="button" aria-label="แก้ไข" (click)="openEdit(item)">
                 แก้ไข
               </button>
               <button class="btn-icon-danger" type="button" aria-label="ลบ" (click)="deleteOrder(item.order_id)">
@@ -75,4 +75,13 @@
   <app-simulate-order-modal [customers]="customers()" [existingOrders]="orders()" (closed)="showSimulate.set(false)"
     (started)="onSimulated()" />
   }
+
+  @if (editingOrder(); as order) {
+  <app-edit-order-dialog
+    [order]="order"
+    [customers]="customers()"
+    (closed)="editingOrder.set(null)"
+    (saved)="onOrderEdited()"
+  />
+}
 </div>

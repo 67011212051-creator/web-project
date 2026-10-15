@@ -6,6 +6,7 @@ import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { environment } from '../../../environments/environment';
 import { OrderModalComponent } from '../../components/order-modal/order-modal.component';
 import { SimulateOrderModalComponent } from '../../components/simulate-order-modal/simulate-order-modal.component';
+import { EditOrderDialogComponent } from '../../components/edit-order-dialog/edit-order-dialog.component';
 
 export interface OrderWithItems extends getOrdersResponse {
   customer?: getCustomersResponse;
@@ -14,13 +15,14 @@ export interface OrderWithItems extends getOrdersResponse {
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [OrderModalComponent, SimulateOrderModalComponent],
+  imports: [OrderModalComponent, SimulateOrderModalComponent, EditOrderDialogComponent],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.css',
 })
 export class OrdersComponent implements OnInit {
   private http = inject(HttpClient);
   showSimulate = signal(false);
+  editingOrder = signal<OrderWithItems | null>(null);
 
   orders = signal<OrderWithItems[]>([]);
   customers = signal<getCustomersResponse[]>([]);
@@ -71,6 +73,15 @@ export class OrdersComponent implements OnInit {
     } catch (error) {
       console.error('Error fetching data:', error);
     }
+  }
+
+  openEdit(order: OrderWithItems) {
+    this.editingOrder.set(order);
+  }
+
+  onOrderEdited() {
+    this.editingOrder.set(null);
+    this.callApi();
   }
 
   openSimulate() {

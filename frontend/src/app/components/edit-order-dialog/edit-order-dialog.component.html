@@ -1,21 +1,13 @@
-<p>edit-order-dialog works!</p>
 <div class="backdrop" (click)="onCancel()"></div>
 
-<section
-  class="dialog"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="edit-order-title"
->
+<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="edit-order-title">
   <header class="dialog-header">
     <div>
       <h2 id="edit-order-title">แก้ไขออเดอร์</h2>
-      <p class="sub mono">เลขออเดอร์ {{ order()?.order_id }}</p>
+      <p class="sub mono">เลขออเดอร์ {{ order().order_id }}</p>
     </div>
 
-    <button class="btn-close" type="button" aria-label="ปิด" (click)="onCancel()">
-      ✕
-    </button>
+    <button class="btn-close" type="button" aria-label="ปิด" (click)="onCancel()">✕</button>
   </header>
 
   <form class="dialog-body" [formGroup]="form" (ngSubmit)="onSubmit()">
@@ -25,36 +17,35 @@
     </div>
 
     <div class="field">
-      <label for="customer_name">ชื่อลูกค้า</label>
-      <input
-        id="customer_name"
-        type="text"
-        formControlName="customer_name"
-        placeholder="เช่น คุณสมชาย"
-      />
-      <small class="error" *ngIf="form.controls.customer_name.touched && form.controls.customer_name.invalid">
-        กรุณากรอกชื่อลูกค้า
-      </small>
+      <label for="customer_id">ชื่อลูกค้า</label>
+      <select id="customer_id" formControlName="customer_id">
+        @for (c of customers(); track c.customer_id) {
+        <option [ngValue]="c.customer_id">{{ c.name }}</option>
+        }
+      </select>
+      @if (form.controls.customer_id.touched && form.controls.customer_id.invalid) {
+      <small class="error">กรุณาเลือกลูกค้า</small>
+      }
     </div>
 
     <div class="field">
-      <label for="qty">จำนวนกล่อง</label>
+      <label for="qty">จำนวนกล่อง (สูงสุด {{ maxQty }})</label>
       <div class="qty-control">
-        <button type="button" class="qty-btn" aria-label="ลดจำนวน" (click)="decreaseQty()">−</button>
-        <input id="qty" type="number" min="1" formControlName="qty" />
-        <button type="button" class="qty-btn" aria-label="เพิ่มจำนวน" (click)="increaseQty()">+</button>
+        <button type="button" class="qty-btn" aria-label="ลดจำนวน" [disabled]="form.controls.qty.value <= 1"
+          (click)="decreaseQty()">−</button>
+        <input id="qty" type="number" min="1" [max]="maxQty" formControlName="qty" />
+        <button type="button" class="qty-btn" aria-label="เพิ่มจำนวน" [disabled]="form.controls.qty.value >= maxQty"
+          (click)="increaseQty()">+</button>
       </div>
-      <small class="error" *ngIf="form.controls.qty.touched && form.controls.qty.invalid">
-        จำนวนกล่องต้องมากกว่า 0
-      </small>
+      @if (form.controls.qty.touched && form.controls.qty.invalid) {
+      <small class="error">จำนวนกล่องต้องอยู่ระหว่าง 1-{{ maxQty }}</small>
+      }
     </div>
 
     <footer class="dialog-footer">
-      <button class="btn btn-secondary" type="button" (click)="onCancel()">
-        ยกเลิก
-      </button>
-      <button class="btn btn-primary" type="submit" [disabled]="form.invalid">
-        บันทึกการแก้ไข
+      <button class="btn btn-secondary" type="button" (click)="onCancel()" [disabled]="saving()">ยกเลิก</button>
+      <button class="btn btn-primary" type="submit" [disabled]="form.invalid || saving()">
+        {{ saving() ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข' }}
       </button>
     </footer>
   </form>
