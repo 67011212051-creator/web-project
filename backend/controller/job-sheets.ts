@@ -108,8 +108,6 @@ router.get("/code/:jobCode", async (req, res) => {
   });
 });
 
-
-
 router.delete("/delete/:id", async (req, res) => {
   const orderId = Number(req.params.id);
     if (!Number.isInteger(orderId) || orderId <= 0) {
@@ -131,77 +129,11 @@ router.delete("/delete/:id", async (req, res) => {
     }   
 })
 
-// export interface JobStop {
-//   order_id: number;
-//   stop_seq: number;
-//   distance_km: number;
-//   travel_time_min: number;
-//   delivery_time_min: number;
-//   latitude: number;
-//   longitude: number;
-//   order?: Order;
-// }
-
-// export interface JobSheet {
-//   job_code: string;
-//   rider_id: number;
-//   rider?: Rider;
-//   distance_km: number;
-//   duration_min: number;
-//   rider_pay: number;
-//   total_boxes: number;
-//   total_orders: number;
-//   sales: number;
-//   food_cost: number;
-//   net_profit: number;
-//   stops: JobStop[];
-// }
-
-// ## Table `job_stops`
-
-// ### Columns
-
-// | Name | Type | Constraints |
-// |------|------|-------------|
-// | `job_id` | `int4` | Primary |
-// | `order_id` | `int4` |  Unique |
-// | `stop_seq` | `int2` | Primary |
-// | `distance_km` | `numeric` |  |
-
-
-// ## Table `job_sheets`
-
-// ### Columns
-
-// | Name | Type | Constraints |
-// |------|------|-------------|
-// | `job_id` | `int4` | Primary |
-// | `job_code` | `varchar` |  Unique |
-// | `rider_id` | `int4` |  |
-// | `distance_km` | `numeric` |  |
-// | `duration_min` | `int4` |  |
-// | `rider_pay` | `numeric` |  |
-
-
 router.post("/dispatch", async (req, res) => {
   const { jobSheets, riders } = req.body;
 
   if (!Array.isArray(jobSheets) || jobSheets.length === 0) {
     res.status(400).json({ error: "Invalid job sheets data" });
-    return;
-  }
-
-  if (
-    !Array.isArray(riders) ||
-    riders.some(
-      (rider: any) =>
-        typeof rider.rider_code !== "string" ||
-        !rider.rider_code.trim() ||
-        typeof rider.route_color !== "string" ||
-        !rider.route_color.trim()
-    )
-  ) {
-    res.status(400).json({ error: "Invalid riders data" });
     return;
   }
 
@@ -213,7 +145,7 @@ router.post("/dispatch", async (req, res) => {
 
   const { data: riderData, error: riderError } = await dbconnect
     .from("riders")
-    .upsert(riderRows, { onConflict: "rider_code" })
+    .insert(riderRows)
     .select("rider_id, rider_code");
 
   if (riderError) {
