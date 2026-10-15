@@ -113,7 +113,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   ngAfterViewInit(): void {
     this.initMap();
-    void this.restoreCachedRoutes();
+    void this.initRouteData();
   }
 
   ngOnDestroy(): void {
@@ -189,33 +189,37 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-  // --- 3. Routing Engine ---
-  private async executeRouting(): Promise<void> {
+  // --- 3. Routing Engine (Sweep Algorithm) ---
+  private async executeRouting(preloadedOrders?: Order[]): Promise<void> {
     if (this.isLoading) return;
 
     this.isLoading = true;
 
     try {
-      const orders = await this.loadOrders();
+      const orders = preloadedOrders ?? await this.loadOrders();
+      const validOrders = orders.filter(
+        o => o.customer && Number.isFinite(o.customer.latitude) && Number.isFinite(o.customer.longitude) &&
+             o.customer.latitude !== 0 && o.customer.longitude !== 0
+      );
 
-      if (orders.length === 0) {
+      if (validOrders.length === 0) {
         this.jobSheets = [];
         this.calculateSummary();
         this.routeLayerGroup.clearLayers();
         this.isCalculated = false;
         this.isDispatched = false;
         sessionStorage.removeItem(ROUTE_CACHE_KEY);
-        alert('ไม่พบข้อมูลออเดอร์ในระบบสำหรับการจัดสายส่ง');
+        alert('ไม่พบข้อมูลออเดอร์ที่มีพิกัดถูกต้องสำหรับการจัดสายส่ง');
         return;
       }
 
-      this.jobSheets = this.computeGreedyRoutes(orders);
+      this.jobSheets = this.computeSweepRoutes(validOrders);
       this.calculateSummary();
 
       this.isCalculated = true;
       this.isDispatched = false;
 
-      this.saveCachedRoutes();
+      this.saveCachedRoutes(this.getOrdersSignature(validOrders));
 
       await this.renderRoutesOnMap();
     } catch (error) {
@@ -227,30 +231,42 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   /**
-   * คำนวณเส้นทางและสร้างจำนวนไรเดอร์ที่เหมาะสมตามระยะทาง เวลา และจำนวนออเดอร์
+   * Sweep Algorithm: จัดกลุ่มออเดอร์ตามมุมทิศทางรอบร้าน (Polar Angle) เพื่อแยกโซนอย่างเป็นระเบียบ
    */
-  private computeGreedyRoutes(orders: Order[]): JobSheet[] {
-    const unassigned = orders
-      .filter(o => o.customer && o.customer.latitude && o.customer.longitude)
-      .map(o => ({ ...o }));
+  private computeSweepRoutes(orders: Order[]): JobSheet[] {
+    const unassigned = orders.map(o => ({ ...o }));
+
+    // 1. คำนวณมุมองศา (Polar Angle) ของลูกค้าแต่ละคนเทียบกับร้านค้า
+    const ordersWithAngle = unassigned.map(o => {
+      const lat = o.customer!.latitude;
+      const lon = o.customer!.longitude;
+      const angle = Math.atan2(lat - MSU_CENTER[0], lon - MSU_CENTER[1]);
+      return { order: o, angle };
+    });
+
+    // 2. เรียงลำดับตามมุมเข็มนาฬิกา เพื่อให้ลูกค้าที่อยู่โซนเดียวกันมาอยู่ติดกัน
+    ordersWithAngle.sort((a, b) => a.angle - b.angle);
+    const sortedOrders = ordersWithAngle.map(item => item.order);
 
     const jobSheets: JobSheet[] = [];
     let riderIndex = 0;
 
-    while (unassigned.length > 0) {
+    // 3. จัดกลุ่มเข้าสายส่งทีละโซน
+    while (sortedOrders.length > 0) {
       let currentLoc: [number, number] = [MSU_CENTER[0], MSU_CENTER[1]];
       let currentDistance = 0;
       let currentTime = 0;
       let currentBoxes = 0;
       const stops: JobStop[] = [];
 
-      while (stops.length < CONFIG.MAX_ORDERS_PER_ROUTE && unassigned.length > 0) {
+      while (stops.length < CONFIG.MAX_ORDERS_PER_ROUTE && sortedOrders.length > 0) {
         let nearestIdx = -1;
         let shortestDist = Infinity;
         let travelTime = 0;
 
-        for (let i = 0; i < unassigned.length; i++) {
-          const candidate = unassigned[i];
+        // ค้นหาจุดที่ใกล้ที่สุดภายในโซนปัจจุบัน
+        for (let i = 0; i < sortedOrders.length; i++) {
+          const candidate = sortedOrders[i];
           const dist = this.haversine(
             currentLoc[0], currentLoc[1],
             candidate.customer!.latitude, candidate.customer!.longitude
@@ -264,25 +280,15 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           }
         }
 
-        // กรณีออเดอร์แรกของสายส่งอยู่ไกลเกินเวลา MAX_DELIVERY_MIN ให้บังคับรับออเดอร์ที่ใกล้ที่สุด 1 งานเพื่อป้องกันค้างลูป
-        if (nearestIdx === -1 && stops.length === 0) {
-          for (let i = 0; i < unassigned.length; i++) {
-            const candidate = unassigned[i];
-            const dist = this.haversine(
-              currentLoc[0], currentLoc[1],
-              candidate.customer!.latitude, candidate.customer!.longitude
-            );
-            if (dist < shortestDist) {
-              shortestDist = dist;
-              nearestIdx = i;
-              travelTime = (dist / CONFIG.SPEED_KMH) * 60;
-            }
-          }
+        // กรณีเลยโควตาเวลา แต่ยังเหลือออเดอร์ในโซน ให้ดึงตัวแรกสุดมาเริ่มสายใหม่ทันที
+        if (nearestIdx === -1) {
+          nearestIdx = 0;
+          const candidate = sortedOrders[nearestIdx];
+          shortestDist = this.haversine(currentLoc[0], currentLoc[1], candidate.customer!.latitude, candidate.customer!.longitude);
+          travelTime = (shortestDist / CONFIG.SPEED_KMH) * 60;
         }
 
-        if (nearestIdx === -1) break;
-
-        const [selected] = unassigned.splice(nearestIdx, 1);
+        const [selected] = sortedOrders.splice(nearestIdx, 1);
         const stopSeq = stops.length + 1;
 
         stops.push({
@@ -446,35 +452,67 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     return Array.from(uniqueRiders.values());
   }
 
-  private saveCachedRoutes(): void {
+  // --- 5. ระบบจัดการ Cache & ตรวจสอบออเดอร์เปลี่ยนแปลงอัตโนมัติ ---
+  private getOrdersSignature(orders: Order[]): string {
+    return orders
+      .map(o => `${o.order_id}:${o.qty}:${o.customer?.latitude}:${o.customer?.longitude}`)
+      .sort()
+      .join('|');
+  }
+
+  private saveCachedRoutes(ordersSignature?: string): void {
     try {
+      const allOrders = this.jobSheets.flatMap(js => js.stops.map(s => s.order!).filter(Boolean));
+      const signature = ordersSignature ?? this.getOrdersSignature(allOrders);
+
       const cache = {
         jobSheets: this.jobSheets,
         summary: this.summary,
         isCalculated: this.isCalculated,
         isDispatched: this.isDispatched,
+        ordersSignature: signature
       };
 
-      sessionStorage.setItem(
-        ROUTE_CACHE_KEY,
-        JSON.stringify(cache)
-      );
+      sessionStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(cache));
     } catch (error) {
       console.error('ไม่สามารถบันทึกข้อมูลเส้นทางได้:', error);
     }
   }
 
-  private async restoreCachedRoutes(): Promise<void> {
+  private async initRouteData(): Promise<void> {
     try {
       const cached = sessionStorage.getItem(ROUTE_CACHE_KEY);
-
       if (!cached) return;
 
       const data = JSON.parse(cached);
-
       if (!Array.isArray(data.jobSheets) || !data.summary) {
         sessionStorage.removeItem(ROUTE_CACHE_KEY);
         return;
+      }
+
+      try {
+        const currentOrders = await this.loadOrders();
+        const validCurrentOrders = currentOrders.filter(
+          o => o.customer && Number.isFinite(o.customer.latitude) && Number.isFinite(o.customer.longitude) &&
+               o.customer.latitude !== 0 && o.customer.longitude !== 0
+        );
+        const currentSig = this.getOrdersSignature(validCurrentOrders);
+
+        if (data.ordersSignature && data.ordersSignature !== currentSig) {
+          sessionStorage.removeItem(ROUTE_CACHE_KEY);
+          if (validCurrentOrders.length > 0) {
+            await this.executeRouting(validCurrentOrders);
+          } else {
+            this.jobSheets = [];
+            this.calculateSummary();
+            this.routeLayerGroup.clearLayers();
+            this.isCalculated = false;
+            this.isDispatched = false;
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('ไม่สามารถเช็กออเดอร์ล่าสุดได้ ใช้ข้อมูลจาก Cache แทนชั่วคราว:', err);
       }
 
       this.jobSheets = data.jobSheets;
@@ -564,7 +602,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     });
   }
 
-  // --- 5. Backend HTTP Calls ---
+  // --- 6. Backend HTTP Calls ---
   private async loadOrders(): Promise<Order[]> {
     const ordersData = await lastValueFrom(
       this.http.get<any[]>(`${API_BASE_URL}/orders`)
