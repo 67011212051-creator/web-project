@@ -10,6 +10,7 @@ import * as L from 'leaflet';
 // พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = 'http://localhost:3000';
+const ROUTE_CACHE_KEY = 'route-planning-cache';
 
 const CONFIG = {
   SPEED_KMH: 30,
@@ -112,6 +113,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   ngAfterViewInit(): void {
     this.initMap();
+    void this.restoreCachedRoutes();
   }
 
   ngOnDestroy(): void {
@@ -171,11 +173,13 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     try {
       await lastValueFrom(
         this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, {
+          riders: this.getAssignedRiders(),
           jobSheets: this.jobSheets
         })
       );
 
       this.isDispatched = true;
+      this.saveCachedRoutes();
       alert('บันทึกใบงานและส่งมอบให้ไรเดอร์เรียบร้อยแล้ว!');
     } catch (error) {
       console.error('Error dispatching jobs:', error);
@@ -185,8 +189,11 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
+
   // --- 3. Routing Engine ---
   private async executeRouting(): Promise<void> {
+    if (this.isLoading) return;
+
     this.isLoading = true;
 
     try {
@@ -197,10 +204,14 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
       this.jobSheets = this.computeGreedyRoutes(orders, riders);
       this.calculateSummary();
-      await this.renderRoutesOnMap();
 
       this.isCalculated = true;
       this.isDispatched = false;
+
+      // บันทึกผลทันที ไม่ต้องรอให้วาดแผนที่เสร็จ
+      this.saveCachedRoutes();
+
+      await this.renderRoutesOnMap();
     } catch (error) {
       console.error('Route calculation error:', error);
       alert('เกิดข้อผิดพลาดในการคำนวณเส้นทาง');
@@ -401,6 +412,61 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     if (allCoords.length > 1) {
       this.map.fitBounds(L.latLngBounds(allCoords), { padding: [40, 40] });
+    }
+  }
+
+  private getAssignedRiders(): Rider[] {
+    const uniqueRiders = new Map<number, Rider>();
+
+    for (const job of this.jobSheets) {
+      if (job.rider) {
+        uniqueRiders.set(job.rider.rider_id, job.rider);
+      }
+    }
+
+    return Array.from(uniqueRiders.values());
+  }
+  private saveCachedRoutes(): void {
+    try {
+      const cache = {
+        jobSheets: this.jobSheets,
+        summary: this.summary,
+        isCalculated: this.isCalculated,
+        isDispatched: this.isDispatched,
+      };
+
+      sessionStorage.setItem(
+        ROUTE_CACHE_KEY,
+        JSON.stringify(cache)
+      );
+    } catch (error) {
+      console.error('ไม่สามารถบันทึกข้อมูลเส้นทางได้:', error);
+    }
+  }
+
+  private async restoreCachedRoutes(): Promise<void> {
+    try {
+      const cached = sessionStorage.getItem(ROUTE_CACHE_KEY);
+
+      if (!cached) return;
+
+      const data = JSON.parse(cached);
+
+      if (!Array.isArray(data.jobSheets) || !data.summary) {
+        sessionStorage.removeItem(ROUTE_CACHE_KEY);
+        return;
+      }
+
+      this.jobSheets = data.jobSheets;
+      this.summary = data.summary;
+      this.isCalculated = data.isCalculated ?? false;
+      this.isDispatched = data.isDispatched ?? false;
+
+      if (this.isCalculated) {
+        await this.renderRoutesOnMap();
+      }
+    } catch (error) {
+      console.error('ไม่สามารถกู้คืนข้อมูลเส้นทางได้:', error);
     }
   }
 
@@ -608,9 +674,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     ];
   }
 
-  /**
-   * สร้างสีไม่จำกัดจำนวนด้วย Golden Angle (137.508°) และคืนค่าเป็น HEX (#RRGGBB)
-   */
   private getDistinctRouteColor(index: number): string {
     const hue = (index * 137.508) % 360;
     // สลับระดับความสดและความเข้มเล็กน้อยเพื่อให้แยกความต่างได้ง่ายขึ้นเมื่อมีหลายสิบสาย
