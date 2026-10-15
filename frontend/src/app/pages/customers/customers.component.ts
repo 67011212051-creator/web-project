@@ -6,7 +6,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
-import { getCustomersResponse } from '../../../../models/get_customers_res';
+import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { CustomerModalComponent } from '../../components/customer-modal/customer-modal.component';
 import { environment } from '../../../environments/environment';
 
@@ -142,9 +142,8 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     lastValueFrom(
-      this.http.delete<{ customer_id: number }>(`${environment.apiUrl}/customers/delete/${id}`)
+      this.http.delete<{ customer_id: number }[]>(`${environment.apiUrl}/customers/delete/${id}`)
     ).then(() => {
-      // Remove the deleted customer from the customers signal
       this.customers.set(this.customers().filter(customer => customer.customer_id !== id));
     })
       .catch((error: HttpErrorResponse) => {

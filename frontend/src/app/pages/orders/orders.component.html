@@ -7,7 +7,7 @@
 
     <div class="header-actions">
       <button class="btn btn-secondary" type="button">จำลองการสั่ง</button>
-      <button class="btn btn-primary" type="button" (click)="callApi()">
+      <button class="btn btn-primary" type="button" (click)="openModal()">
         + เพิ่มออเดอร์
       </button>
     </div>
@@ -64,4 +64,12 @@
       </table>
     </div>
   </div>
+
+  @if (showModal()) {
+    <app-order-modal
+      [customers]="customers()"
+      (closed)="showModal.set(false)"
+      (saved)="onOrderSaved()"
+    />
+  }
 </div>

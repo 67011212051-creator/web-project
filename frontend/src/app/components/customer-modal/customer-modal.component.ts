@@ -6,7 +6,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
-import { getCustomersResponse } from '../../../../models/get_customers_res';
+import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { environment } from '../../../environments/environment';
 
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];

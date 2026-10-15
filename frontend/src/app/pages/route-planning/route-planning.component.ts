@@ -6,10 +6,13 @@ import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
+// ปรับจำนวน ../ ให้ตรงกับตำแหน่งไฟล์จริงของคุณ
+import { environment } from '../../../environments/environment';
+import { getCustomersResponse } from '../../../../models/get-customers-res';
+import { Order, Rider, JobStop, JobSheet } from '../../../../models/route-planning-res';
 
 // พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
-const API_BASE_URL = 'http://localhost:3000';
 
 const CONFIG = {
   SPEED_KMH: 30,
@@ -21,56 +24,6 @@ const CONFIG = {
   FUEL_RATE_PER_KM_BOX: 2,
   MAX_DELIVERY_MIN: 60
 };
-
-export interface Customer {
-  customer_id: number;
-  name: string;
-  phone: string;
-  latitude: number;
-  longitude: number;
-}
-
-export interface Order {
-  order_id: number;
-  customer_id: number;
-  delivery_fee: number;
-  qty: number;
-  date: string;
-  customer?: Customer;
-}
-
-export interface Rider {
-  rider_id: number;
-  rider_code: string;
-  route_color: string;
-  max_orders?: number;
-}
-
-export interface JobStop {
-  order_id: number;
-  stop_seq: number;
-  distance_km: number;
-  travel_time_min: number;
-  delivery_time_min: number;
-  latitude: number;
-  longitude: number;
-  order?: Order;
-}
-
-export interface JobSheet {
-  job_code: string;
-  rider_id: number;
-  rider?: Rider;
-  distance_km: number;
-  duration_min: number;
-  rider_pay: number;
-  total_boxes: number;
-  total_orders: number;
-  sales: number;
-  food_cost: number;
-  net_profit: number;
-  stops: JobStop[];
-}
 
 @Component({
   selector: 'app-route-planning',
@@ -170,7 +123,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     try {
       await lastValueFrom(
-        this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, {
+        this.http.post(`${environment.apiUrl}/job-sheets/dispatch`, {
           jobSheets: this.jobSheets
         })
       );
@@ -386,18 +339,18 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   private async loadOrders(): Promise<Order[]> {
     try {
       const ordersData = await lastValueFrom(
-        this.http.get<any[]>(`${API_BASE_URL}/orders`)
+        this.http.get<any[]>(`${environment.apiUrl}/orders`)
       );
 
       if (ordersData && ordersData.length > 0) {
         // หาก orders ขาดข้อมูล customer ให้ดึงรายชื่อลูกค้าจาก /customers มาจับคู่
         const needJoin = ordersData.some(o => !o.customer && (!o.latitude || !o.longitude));
-        let customersMap = new Map<number, Customer>();
+        let customersMap = new Map<number, getCustomersResponse>();
 
         if (needJoin) {
           try {
             const customersData = await lastValueFrom(
-              this.http.get<Customer[]>(`${API_BASE_URL}/customers`)
+              this.http.get<getCustomersResponse[]>(`${environment.apiUrl}/customers`)
             );
             customersData.forEach(c => customersMap.set(c.customer_id, c));
           } catch (e) {
@@ -409,6 +362,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           const matchedCust = customersMap.get(o.customer_id);
           return {
             order_id: o.order_id,
+            round_id: o.round_id,
             customer_id: o.customer_id,
             delivery_fee: o.delivery_fee,
             qty: o.qty,
@@ -433,7 +387,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   private async loadRiders(): Promise<Rider[]> {
     try {
       const data = await lastValueFrom(
-        this.http.get<Rider[]>(`${API_BASE_URL}/riders`)
+        this.http.get<Rider[]>(`${environment.apiUrl}/riders`)
       );
       if (data && data.length > 0) return data;
     } catch (err) {

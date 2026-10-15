@@ -2,8 +2,10 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { lastValueFrom, forkJoin } from 'rxjs';
 import { getOrdersResponse } from '../../../../models/get-orders-res';
-import { getCustomersResponse } from '../../../../models/get_customers_res';
+import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { environment } from '../../../environments/environment';
+import { OrderModalComponent } from '../../components/order-modal/order-modal.component';
+
 export interface OrderWithItems extends getOrdersResponse {
   customer?: getCustomersResponse;
 }
@@ -11,7 +13,7 @@ export interface OrderWithItems extends getOrdersResponse {
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [],
+  imports: [OrderModalComponent],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.css',
 })
@@ -19,6 +21,8 @@ export class OrdersComponent implements OnInit {
   private http = inject(HttpClient);
 
   orders = signal<OrderWithItems[]>([]);
+  customers = signal<getCustomersResponse[]>([]);
+  showModal = signal(false);
   totalQty = computed(() =>
     this.orders().reduce((sum, order) => sum + order.qty, 0)
   );
@@ -60,10 +64,20 @@ export class OrdersComponent implements OnInit {
         };
       });
 
+      this.customers.set(customersData);
       this.orders.set(combinedData);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
+  }
+
+  openModal() {
+    this.showModal.set(true);
+  }
+
+  onOrderSaved() {
+    this.showModal.set(false);
+    this.callApi();
   }
 
   deleteOrder(id: number) {
