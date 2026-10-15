@@ -70,6 +70,7 @@ export interface JobSheet {
   sales: number;
   food_cost: number;
   net_profit: number;
+  order_ids?: number[]; // รองรับการเก็บรายการ Order ID
   stops: JobStop[];
 }
 
@@ -121,6 +122,17 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.map?.remove();
   }
 
+  // --- Helper สำหรับดึงรหัสออเดอร์มาแสดงในหน้า HTML ---
+  getOrderIds(job: JobSheet): string {
+    if (job.order_ids && job.order_ids.length > 0) {
+      return job.order_ids.join(', ');
+    }
+    if (job.stops && job.stops.length > 0) {
+      return job.stops.map(s => s.order_id).join(', ');
+    }
+    return '';
+  }
+
   // --- 1. จัดการแผนที่ Leaflet ---
   private initMap(): void {
     this.map = L.map(this.mapEl().nativeElement).setView(MSU_CENTER, 14);
@@ -167,23 +179,54 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   async onConfirmDispatch(): Promise<void> {
-    if (this.jobSheets.length === 0) return;
+    if (this.jobSheets.length === 0) {
+      alert('กรุณาคำนวณเส้นทางก่อนกดยืนยันส่งงาน');
+      return;
+    }
+    
     this.isSaving = true;
 
     try {
+      const payload = {
+        riders: this.getAssignedRiders(),
+        jobSheets: this.jobSheets.map(job => ({
+          job_code: job.job_code,
+          rider_id: job.rider_id,
+          distance_km: job.distance_km,
+          duration_min: job.duration_min,
+          rider_pay: job.rider_pay,
+          total_boxes: job.total_boxes,
+          total_orders: job.total_orders,
+          sales: job.sales,
+          food_cost: job.food_cost,
+          net_profit: job.net_profit,
+          rider: job.rider ? {
+            rider_id: job.rider.rider_id,
+            rider_code: job.rider.rider_code,
+            route_color: job.rider.route_color,
+            max_orders: job.rider.max_orders ?? 3
+          } : undefined,
+          stops: job.stops.map(stop => ({
+            order_id: stop.order_id,
+            stop_seq: stop.stop_seq,
+            distance_km: stop.distance_km,
+            travel_time_min: stop.travel_time_min,
+            delivery_time_min: stop.delivery_time_min
+          }))
+        }))
+      };
+
       await lastValueFrom(
-        this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, {
-          riders: this.getAssignedRiders(),
-          jobSheets: this.jobSheets
-        })
+        this.http.post(`${API_BASE_URL}/job-sheets/dispatch`, payload)
       );
 
       this.isDispatched = true;
       this.saveCachedRoutes();
       alert('บันทึกข้อมูลไรเดอร์และใบงานเรียบร้อยแล้ว!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error dispatching jobs:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกใบงานผ่าน API');
+      const errorMsg = error?.error?.error || error?.message || 'เกิดข้อผิดพลาดในการบันทึกใบงานผ่าน API';
+      alert(`ไม่สามารถบันทึกข้อมูลได้: ${errorMsg}`);
     } finally {
       this.isSaving = false;
     }
@@ -236,7 +279,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   private computeSweepRoutes(orders: Order[]): JobSheet[] {
     const unassigned = orders.map(o => ({ ...o }));
 
-    // 1. คำนวณมุมองศา (Polar Angle) ของลูกค้าแต่ละคนเทียบกับร้านค้า
     const ordersWithAngle = unassigned.map(o => {
       const lat = o.customer!.latitude;
       const lon = o.customer!.longitude;
@@ -244,14 +286,12 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       return { order: o, angle };
     });
 
-    // 2. เรียงลำดับตามมุมเข็มนาฬิกา เพื่อให้ลูกค้าที่อยู่โซนเดียวกันมาอยู่ติดกัน
     ordersWithAngle.sort((a, b) => a.angle - b.angle);
     const sortedOrders = ordersWithAngle.map(item => item.order);
 
     const jobSheets: JobSheet[] = [];
     let riderIndex = 0;
 
-    // 3. จัดกลุ่มเข้าสายส่งทีละโซน
     while (sortedOrders.length > 0) {
       let currentLoc: [number, number] = [MSU_CENTER[0], MSU_CENTER[1]];
       let currentDistance = 0;
@@ -264,7 +304,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         let shortestDist = Infinity;
         let travelTime = 0;
 
-        // ค้นหาจุดที่ใกล้ที่สุดภายในโซนปัจจุบัน
         for (let i = 0; i < sortedOrders.length; i++) {
           const candidate = sortedOrders[i];
           const dist = this.haversine(
@@ -280,7 +319,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           }
         }
 
-        // กรณีเลยโควตาเวลา แต่ยังเหลือออเดอร์ในโซน ให้ดึงตัวแรกสุดมาเริ่มสายใหม่ทันที
         if (nearestIdx === -1) {
           nearestIdx = 0;
           const candidate = sortedOrders[nearestIdx];
@@ -326,6 +364,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       const shortTime = Date.now().toString().slice(-6);
       const rand = Math.floor(10 + Math.random() * 90);
       const jobCode = `J-${shortTime}-${rand}-${generatedRider.rider_code}`.slice(0, 20);
+      const orderIds = stops.map(s => s.order_id);
 
       jobSheets.push({
         job_code: jobCode,
@@ -339,6 +378,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         sales,
         food_cost: foodCost,
         net_profit: Math.round(netProfit * 100) / 100,
+        order_ids: orderIds,
         stops
       });
 
@@ -408,6 +448,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson`);
           const data = await res.json();
 
+          const ordersText = this.getOrderIds(job);
           if (data.routes && data.routes.length > 0) {
             const rawRoadPoints: L.LatLngTuple[] = data.routes[0].geometry.coordinates.map(
               (c: [number, number]) => [c[1], c[0]] as L.LatLngTuple
@@ -422,11 +463,13 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
               lineJoin: 'round',
               lineCap: 'round'
             })
-              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ระยะทาง: ${job.distance_km} กม.`)
+              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ออเดอร์: #${ordersText}<br>ระยะทาง: ${job.distance_km} กม.`)
               .addTo(this.routeLayerGroup);
           } else {
             const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
-            L.polyline(offsetWaypoints, { color: routeColor, weight: 3.5, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
+            L.polyline(offsetWaypoints, { color: routeColor, weight: 3.5, dashArray: '6, 6' })
+              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ออเดอร์: #${ordersText}`)
+              .addTo(this.routeLayerGroup);
           }
         } catch {
           const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
@@ -445,7 +488,12 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     for (const job of this.jobSheets) {
       if (job.rider) {
-        uniqueRiders.set(job.rider.rider_id, job.rider);
+        uniqueRiders.set(job.rider.rider_id, {
+          rider_id: job.rider.rider_id,
+          rider_code: job.rider.rider_code,
+          route_color: job.rider.route_color,
+          max_orders: job.rider.max_orders ?? 3
+        });
       }
     }
 
@@ -695,8 +743,8 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   private getDistinctRouteColor(index: number): string {
     const hue = (index * 137.508) % 360;
-    const saturation = 75 + (index % 3) * 7; // 75%, 82%, 89%
-    const lightness = 40 + (index % 2) * 8;  // 40%, 48%
+    const saturation = 75 + (index % 3) * 7;
+    const lightness = 40 + (index % 2) * 8;
     return this.hslToHex(hue, saturation, lightness);
   }
 

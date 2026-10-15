@@ -6,30 +6,30 @@
     </div>
     <div class="header-actions">
       <!-- ปุ่มคำนวณใหม่ -->
-      <button 
+      <button
         type="button"
-        class="btn btn-secondary" 
-        (click)="onRecalculateRoutes()" 
+        class="btn btn-secondary"
+        (click)="onRecalculateRoutes()"
         [disabled]="!isCalculated || isLoading || isSaving">
         ↻ คำนวณใหม่
       </button>
 
       <!-- ปุ่มคำนวณเส้นทาง -->
-      <button 
+      <button
         type="button"
-        class="btn btn-primary" 
-        (click)="onCalculateRoutes()" 
+        class="btn btn-primary"
+        (click)="onCalculateRoutes()"
         [disabled]="isCalculated || isLoading || isSaving">
         <span *ngIf="!isLoading">▤ คำนวณเส้นทาง</span>
         <span *ngIf="isLoading">กำลังประมวลผล...</span>
       </button>
 
       <!-- ปุ่มยืนยันจ่ายงาน -->
-      <button 
+      <button
         type="button"
-        class="btn btn-success" 
+        class="btn btn-success"
         *ngIf="isCalculated"
-        (click)="onConfirmDispatch()" 
+        (click)="onConfirmDispatch()"
         [disabled]="isSaving || isDispatched">
         <span *ngIf="!isSaving && !isDispatched">✓ ยืนยันจ่ายงาน</span>
         <span *ngIf="isSaving">กำลังบันทึก...</span>
@@ -100,17 +100,29 @@
         <strong>{{ summary.maxDurationMin }} นาที</strong>
       </div>
 
-      <!-- Card รายชื่อไรเดอร์ -->
+      <!-- Card รายชื่อไรเดอร์และรหัสใบงาน/ออเดอร์ -->
       <div class="card rider-list-card">
         <ng-container *ngIf="isCalculated && jobSheets.length > 0">
           <div class="rider-row" *ngFor="let job of jobSheets; let idx = index">
             <div class="rider-title">
               <span class="swatch" [style.background]="job.rider?.route_color || '#3a7bd5'"></span>
-              ไรเดอร์คนที่ {{ idx + 1 }}
+              ไรเดอร์คนที่ {{ idx + 1 }} ({{ job.rider?.rider_code }})
             </div>
             <div class="rider-dist">{{ job.distance_km }} กม.</div>
             <div class="rider-detail">
               {{ job.total_orders }} ออเดอร์ · {{ job.total_boxes }} กล่อง · ไม่เกิน 3 ออเดอร์
+            </div>
+
+            <!-- รหัสใบงาน -->
+            <div class="job-code-detail">
+              <strong>Job Code:</strong>
+              <span>{{ job.job_code }}</span>
+            </div>
+
+            <!-- รหัสออเดอร์ที่อยู่ในใบงานนี้ -->
+            <div class="order-code-detail">
+              <strong>รหัสออเดอร์:</strong>
+              <span>{{ getOrderIds(job) || '-' }}</span>
             </div>
           </div>
         </ng-container>
