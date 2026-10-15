@@ -1,0 +1,237 @@
+:host {
+  --eo-bg: #ffffff;
+  --eo-text: #1f2937;
+  --eo-muted: #6b7280;
+  --eo-border: #d9dee5;
+  --eo-primary: #2f6f4f;
+  --eo-primary-hover: #265a40;
+  --eo-danger: #c0392b;
+  --eo-radius: 12px;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+}
+
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--eo-bg);
+  color: var(--eo-text);
+  border-radius: var(--eo-radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  animation: dialog-in 160ms ease-out;
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- header ---------- */
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--eo-border);
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.sub {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--eo-muted);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.btn-close {
+  border: 0;
+  background: transparent;
+  color: var(--eo-muted);
+  font-size: 1rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-close:hover {
+  background: #f1f3f5;
+  color: var(--eo-text);
+}
+
+/* ---------- body / form ---------- */
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.field input {
+  height: 42px;
+  padding: 0 12px;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--eo-border);
+  border-radius: 8px;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--eo-primary);
+  outline-offset: 1px;
+  border-color: var(--eo-primary);
+}
+
+.field input[readonly] {
+  background: #f6f7f9;
+  color: var(--eo-muted);
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--eo-danger);
+  font-size: 0.8125rem;
+}
+
+/* ---------- qty stepper ---------- */
+.qty-control {
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  gap: 8px;
+}
+
+.qty-control input {
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.qty-control input::-webkit-outer-spin-button,
+.qty-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qty-btn {
+  height: 42px;
+  font-size: 1.25rem;
+  line-height: 1;
+  background: #fff;
+  border: 1px solid var(--eo-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.qty-btn:hover {
+  background: #f1f3f5;
+}
+
+/* ---------- footer / buttons ---------- */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--eo-border);
+}
+
+.btn {
+  height: 40px;
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--eo-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--eo-primary-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--eo-text);
+  border-color: var(--eo-border);
+}
+
+.btn-secondary:hover {
+  background: #f1f3f5;
+}
+
+.btn:focus-visible,
+.btn-close:focus-visible,
+.qty-btn:focus-visible {
+  outline: 2px solid var(--eo-primary);
+  outline-offset: 2px;
+}
+
+/* ---------- mobile ---------- */
+@media (max-width: 480px) {
+  :host {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .dialog {
+    max-width: none;
+    border-radius: var(--eo-radius) var(--eo-radius) 0 0;
+  }
+
+  .dialog-footer {
+    flex-direction: column-reverse;
+  }
+
+  .dialog-footer .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog { animation: none; }
+}

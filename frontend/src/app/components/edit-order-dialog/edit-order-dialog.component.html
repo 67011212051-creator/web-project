@@ -1,0 +1,61 @@
+<p>edit-order-dialog works!</p>
+<div class="backdrop" (click)="onCancel()"></div>
+
+<section
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="edit-order-title"
+>
+  <header class="dialog-header">
+    <div>
+      <h2 id="edit-order-title">แก้ไขออเดอร์</h2>
+      <p class="sub mono">เลขออเดอร์ {{ order()?.order_id }}</p>
+    </div>
+
+    <button class="btn-close" type="button" aria-label="ปิด" (click)="onCancel()">
+      ✕
+    </button>
+  </header>
+
+  <form class="dialog-body" [formGroup]="form" (ngSubmit)="onSubmit()">
+    <div class="field">
+      <label for="order_id">เลขออเดอร์</label>
+      <input id="order_id" type="text" formControlName="order_id" readonly />
+    </div>
+
+    <div class="field">
+      <label for="customer_name">ชื่อลูกค้า</label>
+      <input
+        id="customer_name"
+        type="text"
+        formControlName="customer_name"
+        placeholder="เช่น คุณสมชาย"
+      />
+      <small class="error" *ngIf="form.controls.customer_name.touched && form.controls.customer_name.invalid">
+        กรุณากรอกชื่อลูกค้า
+      </small>
+    </div>
+
+    <div class="field">
+      <label for="qty">จำนวนกล่อง</label>
+      <div class="qty-control">
+        <button type="button" class="qty-btn" aria-label="ลดจำนวน" (click)="decreaseQty()">−</button>
+        <input id="qty" type="number" min="1" formControlName="qty" />
+        <button type="button" class="qty-btn" aria-label="เพิ่มจำนวน" (click)="increaseQty()">+</button>
+      </div>
+      <small class="error" *ngIf="form.controls.qty.touched && form.controls.qty.invalid">
+        จำนวนกล่องต้องมากกว่า 0
+      </small>
+    </div>
+
+    <footer class="dialog-footer">
+      <button class="btn btn-secondary" type="button" (click)="onCancel()">
+        ยกเลิก
+      </button>
+      <button class="btn btn-primary" type="submit" [disabled]="form.invalid">
+        บันทึกการแก้ไข
+      </button>
+    </footer>
+  </form>
+</section>
