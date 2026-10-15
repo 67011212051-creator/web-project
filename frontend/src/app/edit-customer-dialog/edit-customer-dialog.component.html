@@ -1,0 +1,70 @@
+<div class="backdrop"></div>
+
+<section
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="edit-customer-title"
+>
+  <header class="dialog-header">
+    <div>
+      <h2 id="edit-customer-title">แก้ไขข้อมูลลูกค้า</h2>
+      <p class="sub mono">ไอดี CUS-001</p>
+    </div>
+
+    <button class="btn-close" type="button" aria-label="ปิด">
+      ✕
+    </button>
+  </header>
+
+  <form class="dialog-body">
+    <div class="field">
+      <label for="name">ชื่อ-นามสกุล</label>
+      <input id="name" type="text" value="สมชาย ใจดี" placeholder="เช่น สมชาย ใจดี" />
+    </div>
+
+    <div class="field">
+      <label for="phone">เบอร์โทร</label>
+      <input
+        id="phone"
+        type="tel"
+        inputmode="numeric"
+        value="081-234-5601"
+        placeholder="เช่น 081-234-5601"
+      />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="latitude">ละติจูด</label>
+        <input
+          id="latitude"
+          type="number"
+          step="0.0001"
+          value="16.2522"
+          placeholder="16.2478"
+        />
+      </div>
+
+      <div class="field">
+        <label for="longitude">ลองจิจูด</label>
+        <input
+          id="longitude"
+          type="number"
+          step="0.0001"
+          value="103.2336"
+          placeholder="103.2512"
+        />
+      </div>
+    </div>
+
+    <footer class="dialog-footer">
+      <button class="btn btn-secondary" type="button">
+        ยกเลิก
+      </button>
+      <button class="btn btn-primary" type="submit">
+        บันทึกการแก้ไข
+      </button>
+    </footer>
+  </form>
+</section>
