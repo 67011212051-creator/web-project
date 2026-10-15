@@ -5,6 +5,7 @@ import { getOrdersResponse } from '../../../../models/get-orders-res';
 import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { environment } from '../../../environments/environment';
 import { OrderModalComponent } from '../../components/order-modal/order-modal.component';
+import { SimulateOrderModalComponent } from '../../components/simulate-order-modal/simulate-order-modal.component';
 
 export interface OrderWithItems extends getOrdersResponse {
   customer?: getCustomersResponse;
@@ -13,12 +14,13 @@ export interface OrderWithItems extends getOrdersResponse {
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [OrderModalComponent],
+  imports: [OrderModalComponent, SimulateOrderModalComponent],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.css',
 })
 export class OrdersComponent implements OnInit {
   private http = inject(HttpClient);
+  showSimulate = signal(false);
 
   orders = signal<OrderWithItems[]>([]);
   customers = signal<getCustomersResponse[]>([]);
@@ -69,6 +71,15 @@ export class OrdersComponent implements OnInit {
     } catch (error) {
       console.error('Error fetching data:', error);
     }
+  }
+
+  openSimulate() {
+    this.showSimulate.set(true);
+  }
+
+  onSimulated() {
+    this.showSimulate.set(false);
+    this.callApi(); // โหลดออเดอร์ใหม่หลังจำลองเสร็จ
   }
 
   openModal() {

@@ -6,7 +6,7 @@
     </div>
 
     <div class="header-actions">
-      <button class="btn btn-secondary" type="button">จำลองการสั่ง</button>
+      <button class="btn btn-secondary" type="button" (click)="openSimulate()">จำลองการสั่ง</button>
       <button class="btn btn-primary" type="button" (click)="openModal()">
         + เพิ่มออเดอร์
       </button>
@@ -40,21 +40,21 @@
 
         <tbody>
           @for (item of orders(); track item.order_id) {
-            <tr>
-              <td class="mono" data-label="เลขออเดอร์">{{ item.order_id }}</td>
-              <td data-label="ชื่อลูกค้า">{{ item.customer?.name }}</td>
-              <td data-label="จำนวนกล่อง">
-                {{ item.qty || 0 }} กล่อง
-              </td>
-              <td class="actions" data-label="จัดการ">
-                <button class="btn-icon" type="button" aria-label="แก้ไข">
-                  แก้ไข
-                </button>
-                <button class="btn-icon-danger" type="button" aria-label="ลบ" (click)="deleteOrder(item.order_id)">
-                  ลบ
-                </button>
-              </td>
-            </tr>
+          <tr>
+            <td class="mono" data-label="เลขออเดอร์">{{ item.order_id }}</td>
+            <td data-label="ชื่อลูกค้า">{{ item.customer?.name }}</td>
+            <td data-label="จำนวนกล่อง">
+              {{ item.qty || 0 }} กล่อง
+            </td>
+            <td class="actions" data-label="จัดการ">
+              <button class="btn-icon" type="button" aria-label="แก้ไข">
+                แก้ไข
+              </button>
+              <button class="btn-icon-danger" type="button" aria-label="ลบ" (click)="deleteOrder(item.order_id)">
+                ลบ
+              </button>
+            </td>
+          </tr>
           } @empty {
           <tr class="empty-row">
             <td colspan="4">ไม่พบข้อมูลออเดอร์</td>
@@ -66,10 +66,13 @@
   </div>
 
   @if (showModal()) {
-    <app-order-modal
-      [customers]="customers()"
-      (closed)="showModal.set(false)"
-      (saved)="onOrderSaved()"
-    />
+  <app-order-modal [customers]="customers()" (closed)="showModal.set(false)" (saved)="onOrderSaved()" />
+
+
+  }
+
+  @if (showSimulate()) {
+  <app-simulate-order-modal [customers]="customers()" [existingOrders]="orders()" (closed)="showSimulate.set(false)"
+    (started)="onSimulated()" />
   }
 </div>

@@ -4,40 +4,26 @@
     <p class="sub">สร้างชุดออเดอร์ตัวอย่างเพื่อทดสอบการจัดเส้นทาง</p>
 
     <div class="field">
-      <label>เลือกลูกค้า / ค้นหา *</label>
-      <input type="text" placeholder="ค้นหาชื่อหรือเบอร์โทร" />
+      <label>จำนวนออเดอร์จำลอง</label>
+      <input type="number" min="1" max="50" [value]="count()" (input)="onCountInput($event)" [disabled]="loading()" />
+      <div class="hint">ช่วงแนะนำ 20-30 ออเดอร์ (สูงสุด 50)</div>
     </div>
 
     <div class="radio-option selected">
-      <input type="radio" checked />
-      <span>สุ่มลูกค้าจากรายชื่อทั้งหมด</span>
-    </div>
-
-    <div class="field">
-      <label>จำนวนออเดอร์จำลอง</label>
-      <input type="number" value="25" />
-      <div class="hint">ช่วงแนะนำ 20-30 ออเดอร์</div>
-    </div>
-
-    <div class="field">
-      <label>จำนวนกล่องต่อออเดอร์</label>
-      <input type="text" value="สุ่ม 1-3 กล่อง" />
-      <div class="hint">สูงสุด 3 กล่อง</div>
-    </div>
-
-    <div class="field">
-      <label>กำหนดส่ง *</label>
-      <input type="text" value="12:30 น." />
+      <input type="checkbox" [checked]="clearOld()" (change)="onClearOldChange($event)" [disabled]="loading()" />
+      <span>ลบออเดอร์เดิมทั้งหมดก่อน ({{ existingOrders().length }} รายการ)</span>
     </div>
 
     <div class="info-box">
-      <strong>ระบบจะสร้างออเดอร์จำลอง 25 รายการ</strong>
-      <div>สุ่มลูกค้า จำนวน 1-3 กล่อง พร้อมสถานะ "รอจัดเส้นทาง" โดยไม่กระทบออเดอร์จริง</div>
+      <strong>ระบบจะสร้างออเดอร์จำลอง {{ count() }} รายการ</strong>
+      <div>{{ progress() || 'สุ่มลูกค้าจากรายชื่อทั้งหมด จำนวน 1-3 กล่องต่อออเดอร์' }}</div>
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary">ยกเลิก</button>
-      <button class="btn btn-primary">เริ่มจำลอง</button>
+      <button class="btn btn-secondary" type="button" (click)="closed.emit()" [disabled]="loading()">ยกเลิก</button>
+      <button class="btn btn-primary" type="button" (click)="start()" [disabled]="loading()">
+        {{ loading() ? 'กำลังทำงาน...' : 'เริ่มจำลอง' }}
+      </button>
     </div>
   </div>
 </div>
