@@ -17,6 +17,9 @@ const getAllRows = (table: string) => async (_req: express.Request, res: express
   res.json(data)
 }
 
+router.get('/customers', getAllRows('customers'))
+router.get('/orders', getAllRows('orders'))
 router.get('/riders', getAllRows('riders'))
 router.get('/job_sheets', getAllRows('job_sheets'))
 router.get('/job_stops', getAllRows('job_stops'))
+
