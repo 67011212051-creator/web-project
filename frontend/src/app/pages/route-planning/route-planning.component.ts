@@ -11,7 +11,6 @@ import * as L from 'leaflet';
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = 'http://localhost:3000';
 
-
 const CONFIG = {
   SPEED_KMH: 30,
   TIME_PER_STOP_MIN: 3,
@@ -109,7 +108,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     estimatedFinishTime: '12:30 น.'
   };
 
-  ngOnInit(): void {}
+  ngOnInit(): void { }
 
   ngAfterViewInit(): void {
     this.initMap();
@@ -219,15 +218,15 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     let riderIndex = 0;
 
     while (unassigned.length > 0) {
+      const distinctColor = this.getDistinctRouteColor(riderIndex);
+
       const baseRider = availableRiders[riderIndex % availableRiders.length] || {
         rider_id: riderIndex + 1,
         rider_code: `RD${String(riderIndex + 1).padStart(2, '0')}`,
-        route_color: ROUTE_COLORS[riderIndex % ROUTE_COLORS.length],
+        route_color: distinctColor,
         max_orders: 3
       };
 
-      // กำหนดสีแยกเฉพาะให้แต่ละสายส่ง (ไม่ซ้ำสีกันแม้ไรเดอร์วิ่งหลายรอบ)
-      const distinctColor = ROUTE_COLORS[riderIndex % ROUTE_COLORS.length];
       const currentRider: Rider = {
         ...baseRider,
         route_color: distinctColor
@@ -323,7 +322,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     for (let jobIdx = 0; jobIdx < totalRoutes; jobIdx++) {
       const job = this.jobSheets[jobIdx];
-      const routeColor = job.rider?.route_color || ROUTE_COLORS[jobIdx % ROUTE_COLORS.length];
+      const routeColor = job.rider?.route_color || this.getDistinctRouteColor(jobIdx);
       const waypoints: L.LatLngTuple[] = [MSU_CENTER];
 
       job.stops.forEach((stop) => {
