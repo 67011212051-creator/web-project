@@ -1,6 +1,5 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
+:host {
+  /* ตัวแปรสี */
   --orange: #f26a1b;
   --orange-dark: #d9560c;
   --dark: #1f2937;
@@ -9,16 +8,23 @@
   --line: #e5e7eb;
   --bg: #f3f4f6;
   --blue: #2563eb;
-}
 
-body {
-  font-family: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
-  background: #d1d5db;
-  color: var(--text);
-  min-height: 100vh;
+  /* สไตล์พื้นหลังและการจัดวางกึ่งกลางหน้าจอ */
   display: flex;
   justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: #d1d5db;
+  color: var(--text);
+  font-family: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
   padding: 16px;
+  box-sizing: border-box;
+}
+
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
 }
 
 .phone-frame {
