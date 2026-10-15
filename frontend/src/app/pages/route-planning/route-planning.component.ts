@@ -258,14 +258,16 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     return jobSheets;
   }
 
-  // --- 4. วาดเส้นตามถนนจริง OSRM ---
+// --- 4. วาดเส้นตามถนนจริง OSRM (พร้อมขยับเส้นขนานกันไม่ให้ทับกัน) ---
   private async renderRoutesOnMap(): Promise<void> {
     if (!this.map) return;
 
     this.routeLayerGroup.clearLayers();
     const allCoords: L.LatLngTuple[] = [MSU_CENTER];
+    const totalRoutes = this.jobSheets.length;
 
-    for (const job of this.jobSheets) {
+    for (let jobIdx = 0; jobIdx < totalRoutes; jobIdx++) {
+      const job = this.jobSheets[jobIdx];
       const routeColor = job.rider?.route_color || '#3a7bd5';
       const waypoints: L.LatLngTuple[] = [MSU_CENTER];
 
@@ -317,15 +319,27 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
           const data = await res.json();
 
           if (data.routes && data.routes.length > 0) {
-            const roadPoints: L.LatLngTuple[] = data.routes[0].geometry.coordinates.map(
+            const rawRoadPoints: L.LatLngTuple[] = data.routes[0].geometry.coordinates.map(
               (c: [number, number]) => [c[1], c[0]] as L.LatLngTuple
             );
-            L.polyline(roadPoints, { color: routeColor, weight: 5, opacity: 0.85 }).addTo(this.routeLayerGroup);
+
+            // ขยับเส้นแต่ละสายให้ตีคู่ขนานกันตามลำดับไรเดอร์
+            const offsetPoints = this.offsetRoadCoords(rawRoadPoints, jobIdx, totalRoutes);
+
+            L.polyline(offsetPoints, {
+              color: routeColor,
+              weight: 4.5,
+              opacity: 0.9
+            })
+              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.distance_km} กม.)`)
+              .addTo(this.routeLayerGroup);
           } else {
-            L.polyline(waypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
+            const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
+            L.polyline(offsetWaypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
           }
         } catch {
-          L.polyline(waypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
+          const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
+          L.polyline(offsetWaypoints, { color: routeColor, weight: 4, dashArray: '6, 6' }).addTo(this.routeLayerGroup);
         }
       }
     }
@@ -333,6 +347,41 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     if (allCoords.length > 1) {
       this.map.fitBounds(L.latLngBounds(allCoords), { padding: [40, 40] });
     }
+  }
+
+  /**
+   * คำนวณขยับพิกัดเส้นทางให้ตีคู่ขนานกัน (ไม่ทับกันเมื่อวิ่งบนถนนเส้นเดียวกัน)
+   */
+  private offsetRoadCoords(coords: L.LatLngTuple[], routeIndex: number, totalRoutes: number): L.LatLngTuple[] {
+    if (totalRoutes <= 1 || coords.length < 2) return coords;
+
+    // ระยะห่างระหว่างเส้น (ประมาณ 10 เมตรบนแผนที่)
+    const OFFSET_STEP = 0.00011;
+    const shift = (routeIndex - (totalRoutes - 1) / 2) * OFFSET_STEP;
+
+    if (shift === 0) return coords;
+
+    return coords.map((pt, i) => {
+      const prev = coords[i > 0 ? i - 1 : i];
+      const next = coords[i < coords.length - 1 ? i + 1 : i];
+
+      const dLat = next[0] - prev[0];
+      const dLng = next[1] - prev[1];
+      const len = Math.sqrt(dLat * dLat + dLng * dLng);
+
+      if (len === 0) {
+        return [pt[0] + shift, pt[1] + shift] as L.LatLngTuple;
+      }
+
+      // หาเวกเตอร์ตั้งฉาก (Normal Vector) เพื่อขยับเส้นออกด้านข้างของถนนอย่างสม่ำเสมอทุกโค้ง
+      const normLat = -dLng / len;
+      const normLng = dLat / len;
+
+      return [
+        pt[0] + normLat * shift,
+        pt[1] + normLng * shift
+      ] as L.LatLngTuple;
+    });
   }
 
   // --- 5. Backend HTTP Calls ---
