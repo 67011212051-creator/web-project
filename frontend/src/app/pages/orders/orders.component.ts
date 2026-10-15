@@ -129,4 +129,19 @@ export class OrdersComponent implements OnInit {
         window.alert('ลบออเดอร์ไม่สำเร็จ');
       });
   }
+
+  customersForAdd = computed(() => {
+    const used = new Set(this.orders().map((o) => o.customer_id));
+    return this.customers().filter((c) => !used.has(c.customer_id));
+  });
+  
+  customersForEdit = computed(() => {
+    const editing = this.editingOrder();
+    const used = new Set(
+      this.orders()
+        .filter((o) => o.order_id !== editing?.order_id)
+        .map((o) => o.customer_id)
+    );
+    return this.customers().filter((c) => !used.has(c.customer_id));
+  });
 }

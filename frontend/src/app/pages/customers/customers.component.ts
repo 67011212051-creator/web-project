@@ -8,6 +8,7 @@ import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { getCustomersResponse } from '../../../../models/get-customers-res';
 import { CustomerModalComponent } from '../../components/customer-modal/customer-modal.component';
+import { EditCustomerDialogComponent } from '../../components/edit-customer-dialog/edit-customer-dialog.component';
 import { environment } from '../../../environments/environment';
 
 
@@ -16,7 +17,7 @@ const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 @Component({
   selector: 'app-customers',
   standalone: true,
-  imports: [CommonModule, CustomerModalComponent],
+  imports: [CommonModule, CustomerModalComponent, EditCustomerDialogComponent],
   templateUrl: './customers.component.html',
   styleUrl: './customers.component.css',
 })
@@ -27,11 +28,18 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   search = signal('');
   showModal = signal(false);
 
+  editingCustomer = signal<getCustomersResponse | null>(null);
+
+  // เรียงตามไอดีจากน้อยไปมากเสมอ
+  sortedCustomers = computed(() =>
+    [...this.customers()].sort((a, b) => a.customer_id - b.customer_id)
+  );
+
   // กรองตามชื่อหรือเบอร์โทร
   filteredCustomers = computed(() => {
     const term = this.search().trim().toLowerCase();
-    if (!term) return this.customers();
-    return this.customers().filter(
+    if (!term) return this.sortedCustomers();
+    return this.sortedCustomers().filter(
       (c) =>
         c.name.toLowerCase().includes(term) ||
         c.phone.replace(/-/g, '').includes(term.replace(/-/g, ''))
@@ -134,6 +142,11 @@ export class CustomersComponent implements OnInit, AfterViewInit, OnDestroy {
   onCustomerSaved(customer: getCustomersResponse) {
     this.customers.update((list) => [...list, customer]);
     this.showModal.set(false);
+  }
+
+  onCustomerUpdated() {
+    this.editingCustomer.set(null);
+    this.loadCustomers();
   }
 
   deleteCustomer(id: number) {

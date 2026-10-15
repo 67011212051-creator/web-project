@@ -5,8 +5,9 @@
 
     <div class="field">
       <label>จำนวนออเดอร์จำลอง</label>
-      <input type="number" min="1" max="50" [value]="count()" (input)="onCountInput($event)" [disabled]="loading()" />
-      <div class="hint">ช่วงแนะนำ 20-30 ออเดอร์ (สูงสุด 50)</div>
+      <input type="number" min="1" [max]="maxCount()" [value]="count()" (input)="onCountInput($event)"
+        [disabled]="loading()" />
+      <div class="hint">สูงสุด {{ maxCount() }} ออเดอร์ (1 ลูกค้า ต่อ 1 ออเดอร์)</div>
     </div>
 
     <div class="radio-option selected">
@@ -15,7 +16,7 @@
     </div>
 
     <div class="info-box">
-      <strong>ระบบจะสร้างออเดอร์จำลอง {{ count() }} รายการ</strong>
+      <strong>ระบบจะสร้างออเดอร์จำลอง {{ effectiveCount() }} รายการ</strong>
       <div>{{ progress() || 'สุ่มลูกค้าจากรายชื่อทั้งหมด จำนวน 1-3 กล่องต่อออเดอร์' }}</div>
     </div>
 

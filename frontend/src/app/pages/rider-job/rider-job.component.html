@@ -1,4 +1,5 @@
 <div class="phone-frame">
+  @if (view() === 'lookup') {
   <!-- LOOKUP VIEW -->
   <div class="screen lookup">
     <header class="topbar">
@@ -7,93 +8,118 @@
       <div class="topbar-round">รอบเที่ยง</div>
     </header>
     <div class="body">
-      <label>กรอกเลขใบงาน</label>
+      <label for="jobCode">กรอกเลขใบงาน</label>
       <div class="lookup-row">
-        <input type="text" value="JOB-240913-R1" />
-        <button class="btn btn-primary">ดูใบงาน</button>
+        <input
+          id="jobCode"
+          type="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          placeholder="เช่น J-AB12CD34"
+          [value]="jobCodeInput()"
+          (input)="onCodeInput($event)"
+          (keyup.enter)="findJob()"
+        />
+        <button
+          class="btn btn-primary"
+          type="button"
+          (click)="findJob()"
+          [disabled]="isLoading() || !jobCodeInput().trim()"
+        >
+          {{ isLoading() ? 'กำลังค้นหา...' : 'ดูใบงาน' }}
+        </button>
       </div>
+      @if (errorMsg()) {
+      <p class="error">{{ errorMsg() }}</p>
+      }
     </div>
   </div>
+  }
 
+  @if (view() === 'detail' && job(); as j) {
   <!-- DETAIL VIEW -->
   <div class="screen detail">
     <header class="topbar dark">
+      <button class="back-btn" type="button" (click)="leaveJob()">‹ ออก</button>
       <div class="topbar-title">รายละเอียดใบงาน</div>
       <div class="topbar-round">รอบเที่ยง</div>
     </header>
     <div class="body">
       <div class="job-summary">
-        <div class="job-code">JOB-240913-R1</div>
+        <div class="job-code">{{ j.job_code }}</div>
         <div class="job-status"><span class="dot"></span> พร้อมเริ่มงาน</div>
         <div class="job-pickup">รับอาหาร 11:30 น.</div>
-        <div class="job-boxes">6 กล่อง</div>
-      </div>
-
-      <div class="section-title">ลำดับจุดส่ง · 3 ออเดอร์</div>
-
-      <div class="point-card">
-        <div class="point-num">1</div>
-        <div class="point-body">
-          <div class="point-name">คุณอรทัย พรมมา</div>
-          <div class="point-box">2 กล่อง</div>
-          <div class="point-phone">☎ 089-245-7812</div>
-          <div class="point-address">หมู่บ้านเอื้ออาทร ท่าขอนยาง</div>
-          <div class="point-eta">คาดถึง 11:48 น.</div>
-          <button class="btn btn-secondary nav-btn">นำทาง</button>
+        <div class="job-boxes">{{ j.total_boxes }} กล่อง</div>
+        <div class="job-pay">รายได้ {{ j.rider_pay | number: '1.0-2' }} บาท</div>
+        <div class="job-route">
+          ระยะทาง {{ j.distance_km | number: '1.0-1' }} กม. · ประมาณ {{ j.duration_min }} นาที
         </div>
       </div>
 
+      <div class="section-title">ลำดับจุดส่ง · {{ j.total_orders }} ออเดอร์</div>
+
+      @for (stop of stops(); track stop.order_id) {
       <div class="point-card">
-        <div class="point-num">2</div>
+        <div class="point-num">{{ stop.stop_seq }}</div>
         <div class="point-body">
-          <div class="point-name">คุณกิตติศักดิ์ แสงทอง</div>
-          <div class="point-box">1 กล่อง</div>
-          <div class="point-phone">☎ 081-673-9021</div>
-          <div class="point-address">ถ.ขามเรียง ใกล้ประตู 2 มมส</div>
-          <div class="point-eta">คาดถึง 12:02 น.</div>
-          <button class="btn btn-secondary nav-btn">นำทาง</button>
+          <div class="point-name">{{ stop.customer_name }}</div>
+          <div class="point-box">{{ stop.qty }} กล่อง</div>
+          <div class="point-phone">☎ {{ stop.phone }}</div>
+          <div class="point-eta">คาดถึง {{ stop.eta }}</div>
+          <a
+            class="btn btn-secondary nav-btn"
+            [href]="mapsUrl(stop)"
+            target="_blank"
+            rel="noopener noreferrer"
+            >นำทาง</a
+          >
         </div>
       </div>
+      }
 
-      <div class="point-card">
-        <div class="point-num">3</div>
-        <div class="point-body">
-          <div class="point-name">คุณณัฐณิชา วงศ์คำ</div>
-          <div class="point-box">3 กล่อง</div>
-          <div class="point-phone">☎ 095-148-3356</div>
-          <div class="point-address">หอพักสุใจ ต.ขามเรียง</div>
-          <div class="point-eta">คาดถึง 12:17 น.</div>
-          <button class="btn btn-secondary nav-btn">นำทาง</button>
-        </div>
-      </div>
-
-      <button class="btn btn-primary start-btn">เริ่มงาน · เปิดเส้นทาง</button>
+      <button class="btn btn-primary start-btn" type="button" (click)="startJob()">
+        เริ่มงาน · เปิดเส้นทาง
+      </button>
     </div>
   </div>
+  }
 
+  @if (view() === 'navigate' && job(); as j) {
   <!-- NAVIGATE VIEW -->
   <div class="screen navigate">
     <header class="topbar dark">
-      <button class="back-btn">‹ กลับไปดูใบงาน</button>
+      <button class="back-btn" type="button" (click)="backToDetail()">‹ กลับไปดูใบงาน</button>
       <div class="topbar-round">รอบเที่ยง</div>
     </header>
 
-    <div class="map-mock">
-      <div class="map-tag">● ตำแหน่งปัจจุบัน · หน้าร้าน LunchFlow</div>
-      <div class="map-pin active" style="top: 15%; right: 15%;">1</div>
-      <div class="map-pin" style="top: 37%; right: 23%;">2</div>
-      <div class="map-pin" style="top: 59%; right: 31%;">3</div>
-      <div class="map-path"></div>
-    </div>
-
     <div class="body">
-      <div class="progress-label">จุดส่งถัดไป · 1/3</div>
-      <div class="progress-eta">ETA 11:48 น.</div>
-      <div class="dest-name">คุณอรทัย พรมมา · 2 กล่อง</div>
-      <div class="dest-address">หมู่บ้านเอื้ออาทร ท่าขอนยาง</div>
+      @if (finished()) {
+      <div class="progress-label">ส่งครบทุกจุดแล้ว 🎉</div>
+      <div class="dest-name">{{ j.total_orders }} ออเดอร์ · {{ j.total_boxes }} กล่อง</div>
+      <div class="job-pay">รายได้ {{ j.rider_pay | number: '1.0-2' }} บาท</div>
+      <button class="btn btn-primary arrive-btn" type="button" (click)="leaveJob()">
+        เสร็จสิ้น
+      </button>
+      } @else if (currentStop(); as stop) {
+      <div class="progress-label">
+        จุดส่งถัดไป · {{ currentIndex() + 1 }}/{{ stops().length }}
+      </div>
+      <div class="progress-eta">ETA {{ stop.eta }}</div>
+      <div class="dest-name">{{ stop.customer_name }} · {{ stop.qty }} กล่อง</div>
 
-      <button class="btn btn-secondary call-btn">☎ โทร</button>
-      <button class="btn btn-primary arrive-btn">ถึงจุดส่งแล้ว</button>
+      <a
+        class="btn btn-secondary nav-btn"
+        [href]="mapsUrl(stop)"
+        target="_blank"
+        rel="noopener noreferrer"
+        >นำทางด้วยแผนที่</a
+      >
+      <a class="btn btn-secondary call-btn" [href]="'tel:' + stop.phone">☎ โทร</a>
+      <button class="btn btn-primary arrive-btn" type="button" (click)="onArrived()">
+        ถึงจุดส่งแล้ว
+      </button>
+      }
     </div>
   </div>
+  }
 </div>
