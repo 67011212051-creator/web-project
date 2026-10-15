@@ -2,64 +2,56 @@
   <div class="screen">
     <header class="topbar">
       <div class="topbar-title">รายละเอียดใบงาน</div>
-      <div class="topbar-round">รอบเที่ยง</div>
+      @if (job()) {
+        <button class="btn btn-secondary" type="button" (click)="logout()">เปลี่ยนใบงาน</button>
+      }
     </header>
 
     <div class="body">
-      <div class="lookup">
-        <label class="lookup-label" for="jobCode">กรอกเลขใบงาน</label>
-        <div class="lookup-row">
-          <input id="jobCode" class="lookup-input" type="text" value="JOB-240913-R1" />
-          <button class="btn btn-primary lookup-btn" type="button">ดูใบงาน</button>
+      @if (!job()) {
+        <div class="code-box">
+          <label for="jobCode">รหัสใบงาน</label>
+          <input
+            id="jobCode"
+            type="text"
+            placeholder="กรอกรหัสใบงานที่ร้านให้"
+            autocapitalize="characters"
+            [value]="codeInput()"
+            (input)="onInput($event)"
+            (keyup.enter)="submit()"
+            [disabled]="loading()"
+          />
+          @if (error()) { <p class="error">{{ error() }}</p> }
+          <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="loading()">
+            {{ loading() ? 'กำลังตรวจสอบ...' : 'เปิดใบงาน' }}
+          </button>
         </div>
-      </div>
+      }
 
-      <div class="job-summary">
-        <div class="job-code">JOB-240913-R1</div>
-        <div class="job-status"><span class="dot"></span> พร้อมเริ่มงาน</div>
-        <div class="job-pickup">รับอาหาร 11:30 น.</div>
-        <div class="job-boxes">6 กล่อง</div>
-      </div>
-
-      <div class="section-title">ลำดับจุดส่ง · 3 ออเดอร์</div>
-
-      <div class="point-card">
-        <div class="point-num">1</div>
-        <div class="point-body">
-          <div class="point-name">คุณอรทัย พรมมา</div>
-          <div class="point-box">2 กล่อง</div>
-          <div class="point-phone">☎ 089-245-7812</div>
-          <div class="point-address">หมู่บ้านเอื้ออาทร ท่าขอนยาง</div>
-          <div class="point-eta">คาดถึง 11:48 น.</div>
-          <a class="btn btn-secondary nav-btn" href="/navigate">นำทาง</a>
+      @if (job(); as j) {
+        <div class="job-summary">
+          <div class="job-code">{{ j.job_code }}</div>
+          <div class="job-boxes">{{ j.total_boxes }} กล่อง</div>
+          <div class="job-pickup">{{ j.distance_km }} กม. · ประมาณ {{ j.duration_min }} นาที</div>
         </div>
-      </div>
 
-      <div class="point-card">
-        <div class="point-num">2</div>
-        <div class="point-body">
-          <div class="point-name">คุณกิตติศักดิ์ แสงทอง</div>
-          <div class="point-box">1 กล่อง</div>
-          <div class="point-phone">☎ 081-673-9021</div>
-          <div class="point-address">ถ.ขามเรียง ใกล้ประตู 2 มมส</div>
-          <div class="point-eta">คาดถึง 12:02 น.</div>
-          <a class="btn btn-secondary nav-btn" href="/navigate">นำทาง</a>
-        </div>
-      </div>
+        <div class="section-title">ลำดับจุดส่ง · {{ j.total_orders }} ออเดอร์</div>
 
-      <div class="point-card">
-        <div class="point-num">3</div>
-        <div class="point-body">
-          <div class="point-name">คุณณัฐณิชา วงศ์คำ</div>
-          <div class="point-box">3 กล่อง</div>
-          <div class="point-phone">☎ 095-148-3356</div>
-          <div class="point-address">หอพักสุใจ ต.ขามเรียง</div>
-          <div class="point-eta">คาดถึง 12:17 น.</div>
-          <a class="btn btn-secondary nav-btn" href="/navigate">นำทาง</a>
-        </div>
-      </div>
+        @for (s of j.stops; track s.order_id) {
+          <div class="point-card">
+            <div class="point-num">{{ s.stop_seq }}</div>
+            <div class="point-body">
+              <div class="point-name">{{ s.customer_name }}</div>
+              <div class="point-box">{{ s.qty }} กล่อง</div>
+              <div class="point-phone">☎ {{ s.phone }}</div>
+            </div>
+          </div>
+        }
 
-      <a class="btn btn-primary start-btn" href="/navigate">เริ่มงาน · เปิดเส้นทาง</a>
+        @if (j.stops.length) {
+          <a class="btn btn-primary start-btn" routerLink="/navigate">เริ่มงาน · เปิดเส้นทาง</a>
+        }
+      }
     </div>
   </div>
 </div>

@@ -1,6 +1,10 @@
-<div class="shell">
-  <app-sidebar></app-sidebar>
-  <main class="content">
-    <router-outlet></router-outlet>
-  </main>
-</div>
+@if (hideLayout()) {
+  <router-outlet></router-outlet>
+} @else {
+  <div class="shell">
+    <app-sidebar></app-sidebar>
+    <main class="content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+}
