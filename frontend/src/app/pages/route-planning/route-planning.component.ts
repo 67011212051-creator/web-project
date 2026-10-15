@@ -106,7 +106,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     deliveryDistanceCost: 0,
     riderBaseCost: 0,
     netProfit: 0,
-    estimatedFinishTime: '12:30 น.'
+    estimatedFinishTime: '11:30 น.'
   };
 
   ngOnInit(): void { }
@@ -180,7 +180,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
       this.isDispatched = true;
       this.saveCachedRoutes();
-      alert('บันทึกใบงานและส่งมอบให้ไรเดอร์เรียบร้อยแล้ว!');
+      alert('บันทึกข้อมูลไรเดอร์และใบงานเรียบร้อยแล้ว!');
     } catch (error) {
       console.error('Error dispatching jobs:', error);
       alert('เกิดข้อผิดพลาดในการบันทึกใบงานผ่าน API');
@@ -189,7 +189,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-
   // --- 3. Routing Engine ---
   private async executeRouting(): Promise<void> {
     if (this.isLoading) return;
@@ -197,30 +196,40 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.isLoading = true;
 
     try {
-      const [orders, riders] = await Promise.all([
-        this.loadOrders(),
-        this.loadRiders()
-      ]);
+      const orders = await this.loadOrders();
 
-      this.jobSheets = this.computeGreedyRoutes(orders, riders);
+      if (orders.length === 0) {
+        this.jobSheets = [];
+        this.calculateSummary();
+        this.routeLayerGroup.clearLayers();
+        this.isCalculated = false;
+        this.isDispatched = false;
+        sessionStorage.removeItem(ROUTE_CACHE_KEY);
+        alert('ไม่พบข้อมูลออเดอร์ในระบบสำหรับการจัดสายส่ง');
+        return;
+      }
+
+      this.jobSheets = this.computeGreedyRoutes(orders);
       this.calculateSummary();
 
       this.isCalculated = true;
       this.isDispatched = false;
 
-      // บันทึกผลทันที ไม่ต้องรอให้วาดแผนที่เสร็จ
       this.saveCachedRoutes();
 
       await this.renderRoutesOnMap();
     } catch (error) {
       console.error('Route calculation error:', error);
-      alert('เกิดข้อผิดพลาดในการคำนวณเส้นทาง');
+      alert('เกิดข้อผิดพลาดในการดึงข้อมูลออเดอร์หรือคำนวณเส้นทาง');
     } finally {
       this.isLoading = false;
     }
   }
 
-  private computeGreedyRoutes(orders: Order[], availableRiders: Rider[]): JobSheet[] {
+  /**
+   * คำนวณเส้นทางและสร้างจำนวนไรเดอร์ที่เหมาะสมตามระยะทาง เวลา และจำนวนออเดอร์
+   */
+  private computeGreedyRoutes(orders: Order[]): JobSheet[] {
     const unassigned = orders
       .filter(o => o.customer && o.customer.latitude && o.customer.longitude)
       .map(o => ({ ...o }));
@@ -229,20 +238,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     let riderIndex = 0;
 
     while (unassigned.length > 0) {
-      const distinctColor = this.getDistinctRouteColor(riderIndex);
-
-      const baseRider = availableRiders[riderIndex % availableRiders.length] || {
-        rider_id: riderIndex + 1,
-        rider_code: `RD${String(riderIndex + 1).padStart(2, '0')}`,
-        route_color: distinctColor,
-        max_orders: 3
-      };
-
-      const currentRider: Rider = {
-        ...baseRider,
-        route_color: distinctColor
-      };
-
       let currentLoc: [number, number] = [MSU_CENTER[0], MSU_CENTER[1]];
       let currentDistance = 0;
       let currentTime = 0;
@@ -266,6 +261,22 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
             shortestDist = dist;
             nearestIdx = i;
             travelTime = tTime;
+          }
+        }
+
+        // กรณีออเดอร์แรกของสายส่งอยู่ไกลเกินเวลา MAX_DELIVERY_MIN ให้บังคับรับออเดอร์ที่ใกล้ที่สุด 1 งานเพื่อป้องกันค้างลูป
+        if (nearestIdx === -1 && stops.length === 0) {
+          for (let i = 0; i < unassigned.length; i++) {
+            const candidate = unassigned[i];
+            const dist = this.haversine(
+              currentLoc[0], currentLoc[1],
+              candidate.customer!.latitude, candidate.customer!.longitude
+            );
+            if (dist < shortestDist) {
+              shortestDist = dist;
+              nearestIdx = i;
+              travelTime = (dist / CONFIG.SPEED_KMH) * 60;
+            }
           }
         }
 
@@ -293,6 +304,14 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
       if (stops.length === 0) break;
 
+      const distinctColor = this.getDistinctRouteColor(riderIndex);
+      const generatedRider: Rider = {
+        rider_id: riderIndex + 1,
+        rider_code: `RD${String(riderIndex + 1).padStart(2, '0')}`,
+        route_color: distinctColor,
+        max_orders: CONFIG.MAX_ORDERS_PER_ROUTE
+      };
+
       const deliveryCost = CONFIG.RIDER_BASE_FEE + (currentDistance * currentBoxes * CONFIG.FUEL_RATE_PER_KM_BOX);
       const sales = currentBoxes * CONFIG.PRICE_PER_BOX;
       const foodCost = currentBoxes * CONFIG.FOOD_COST_PER_BOX;
@@ -300,12 +319,12 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
       const shortTime = Date.now().toString().slice(-6);
       const rand = Math.floor(10 + Math.random() * 90);
-      const jobCode = `J-${shortTime}-${rand}-${currentRider.rider_code}`.slice(0, 20);
+      const jobCode = `J-${shortTime}-${rand}-${generatedRider.rider_code}`.slice(0, 20);
 
       jobSheets.push({
         job_code: jobCode,
-        rider_id: currentRider.rider_id,
-        rider: currentRider,
+        rider_id: generatedRider.rider_id,
+        rider: generatedRider,
         distance_km: Math.round(currentDistance * 100) / 100,
         duration_min: Math.round(currentTime),
         rider_pay: Math.round(deliveryCost * 100) / 100,
@@ -426,6 +445,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     return Array.from(uniqueRiders.values());
   }
+
   private saveCachedRoutes(): void {
     try {
       const cache = {
@@ -498,7 +518,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     const cleanCoords = this.simplifyCoords(coords);
 
-    // ควบคุมความกว้างรวมทุกสายไม่ให้เกินความกว้างถนน (~4.5 เมตรซ้าย-ขวา)
     const MAX_TOTAL_SPREAD = 0.00008;
     const step = Math.min(0.000016, MAX_TOTAL_SPREAD / Math.max(1, totalRoutes - 1));
     const shift = (routeIndex - (totalRoutes - 1) / 2) * step;
@@ -506,7 +525,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     if (shift === 0) return cleanCoords;
 
     return cleanCoords.map((pt, i) => {
-      // จุดเริ่มต้น (ร้านค้า) และจุดส่งสุดท้าย ให้คงพิกัดใกล้หมุดจริง
       if (i === 0 || i === cleanCoords.length - 1) {
         return pt;
       }
@@ -522,13 +540,11 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       const v2Lng = next[1] - pt[1];
       const len2 = Math.sqrt(v2Lat * v2Lat + v2Lng * v2Lng) || 1;
 
-      // เวกเตอร์ตั้งฉากของช่วงก่อนหน้าและช่วงถัดไป
       const n1Lat = -v1Lng / len1;
       const n1Lng = v1Lat / len1;
       const n2Lat = -v2Lng / len2;
       const n2Lng = v2Lat / len2;
 
-      // เฉลี่ยทิศทางตั้งฉากที่มุมเลี้ยวให้โค้งมน ไม่พุ่งแหลม
       let bisLat = n1Lat + n2Lat;
       let bisLng = n1Lng + n2Lng;
       const bisLen = Math.sqrt(bisLat * bisLat + bisLng * bisLng);
@@ -550,66 +566,41 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // --- 5. Backend HTTP Calls ---
   private async loadOrders(): Promise<Order[]> {
-    try {
-      const ordersData = await lastValueFrom(
-        this.http.get<any[]>(`${API_BASE_URL}/orders`)
+    const ordersData = await lastValueFrom(
+      this.http.get<any[]>(`${API_BASE_URL}/orders`)
+    );
+
+    if (!ordersData || ordersData.length === 0) {
+      return [];
+    }
+
+    const needJoin = ordersData.some(o => !o.customer && (!o.latitude || !o.longitude));
+    const customersMap = new Map<number, Customer>();
+
+    if (needJoin) {
+      const customersData = await lastValueFrom(
+        this.http.get<Customer[]>(`${API_BASE_URL}/customers`)
       );
+      customersData.forEach(c => customersMap.set(c.customer_id, c));
+    }
 
-      if (ordersData && ordersData.length > 0) {
-        const needJoin = ordersData.some(o => !o.customer && (!o.latitude || !o.longitude));
-        let customersMap = new Map<number, Customer>();
-
-        if (needJoin) {
-          try {
-            const customersData = await lastValueFrom(
-              this.http.get<Customer[]>(`${API_BASE_URL}/customers`)
-            );
-            customersData.forEach(c => customersMap.set(c.customer_id, c));
-          } catch (e) {
-            console.warn('Could not fetch /customers to join with orders:', e);
-          }
+    return ordersData.map(o => {
+      const matchedCust = customersMap.get(o.customer_id);
+      return {
+        order_id: o.order_id,
+        customer_id: o.customer_id,
+        delivery_fee: o.delivery_fee,
+        qty: o.qty,
+        date: o.date,
+        customer: o.customer || matchedCust || {
+          customer_id: o.customer_id,
+          name: o.name || 'ลูกค้า',
+          phone: o.phone || '-',
+          latitude: Number(o.latitude),
+          longitude: Number(o.longitude)
         }
-
-        return ordersData.map(o => {
-          const matchedCust = customersMap.get(o.customer_id);
-          return {
-            order_id: o.order_id,
-            customer_id: o.customer_id,
-            delivery_fee: o.delivery_fee,
-            qty: o.qty,
-            date: o.date,
-            customer: o.customer || matchedCust || {
-              customer_id: o.customer_id,
-              name: o.name || 'ลูกค้า',
-              phone: o.phone || '-',
-              latitude: Number(o.latitude),
-              longitude: Number(o.longitude)
-            }
-          };
-        });
-      }
-    } catch (err) {
-      console.warn('Backend /orders failed, using fallback:', err);
-    }
-
-    return this.getMockOrders();
-  }
-
-  private async loadRiders(): Promise<Rider[]> {
-    try {
-      const data = await lastValueFrom(
-        this.http.get<Rider[]>(`${API_BASE_URL}/riders`)
-      );
-      if (data && data.length > 0) return data;
-    } catch (err) {
-      console.warn('Backend /riders failed, using fallback:', err);
-    }
-
-    return [
-      { rider_id: 1, rider_code: 'RD01', route_color: '#E63946', max_orders: 3 },
-      { rider_id: 2, rider_code: 'RD02', route_color: '#2563EB', max_orders: 3 },
-      { rider_id: 3, rider_code: 'RD03', route_color: '#10B981', max_orders: 3 }
-    ];
+      };
+    });
   }
 
   private haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -664,21 +655,10 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     };
   }
 
-  private getMockOrders(): Order[] {
-    return [
-      { order_id: 1, customer_id: 3, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 3, name: 'คุณณัฐณิชา วงศ์คำ', phone: '095-148-3356', latitude: 16.254242, longitude: 103.240783 } },
-      { order_id: 2, customer_id: 4, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 4, name: 'คุณธนกร ศรีบุญเรือง', phone: '086-552-4108', latitude: 16.248976, longitude: 103.259183 } },
-      { order_id: 3, customer_id: 5, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 5, name: 'คุณพิมพ์ชนก ใจดี', phone: '092-883-7124', latitude: 16.243858, longitude: 103.256836 } },
-      { order_id: 4, customer_id: 7, delivery_fee: 10, qty: 1, date: '2026-10-09', customer: { customer_id: 7, name: 'phanuwat', phone: '1234567890', latitude: 16.2541909, longitude: 103.2406816 } },
-      { order_id: 5, customer_id: 9, delivery_fee: 10, qty: 2, date: '2026-10-09', customer: { customer_id: 9, name: 'test test', phone: '088-888-8888', latitude: 16.2480946, longitude: 103.2531595 } }
-    ];
-  }
-
   private getDistinctRouteColor(index: number): string {
     const hue = (index * 137.508) % 360;
-    // สลับระดับความสดและความเข้มเล็กน้อยเพื่อให้แยกความต่างได้ง่ายขึ้นเมื่อมีหลายสิบสาย
     const saturation = 75 + (index % 3) * 7; // 75%, 82%, 89%
-    const lightness = 40 + (index % 2) * 8;  // 40%, 48% (สีสดเข้ม เห็นชัดบนแผนที่สีอ่อน)
+    const lightness = 40 + (index % 2) * 8;  // 40%, 48%
     return this.hslToHex(hue, saturation, lightness);
   }
 
