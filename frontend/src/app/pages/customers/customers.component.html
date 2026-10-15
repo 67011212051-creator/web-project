@@ -17,6 +17,7 @@
       <table>
         <thead>
           <tr>
+            <th>ไอดี</th>
             <th>ชื่อ</th>
             <th>เบอร์โทร</th>
             <th>พิกัด (lat/lng)</th>
@@ -26,6 +27,7 @@
         <tbody>
           @for (c of filteredCustomers(); track c.customer_id) {
           <tr>
+            <td></td>
             <td>{{ c.name }}</td>
             <td>{{ c.phone }}</td>
             <td>{{ c.latitude }}, {{ c.longitude }}</td>
@@ -36,7 +38,7 @@
           </tr>
           } @empty {
           <tr>
-            <td colspan="4">ไม่พบข้อมูลลูกค้า</td>
+            <td colspan="5">ไม่พบข้อมูลลูกค้า</td>
           </tr>
           }
         </tbody>

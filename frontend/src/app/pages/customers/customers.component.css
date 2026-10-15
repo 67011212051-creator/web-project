@@ -62,3 +62,7 @@ td {
 }
 
 .map-footer { padding: 14px 6px 4px; font-weight: 600; }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
