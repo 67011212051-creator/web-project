@@ -11,7 +11,7 @@ app.use(express.json());
 
 // 2. เปิดใช้งาน CORS (แนะนำระบุ origin ที่อนุญาต หรือใช้ cors() เพื่อปลดล็อกทุก domain ในช่วง dev)
 app.use(cors({
-  origin: 'http://localhost:4200'
+  origin: 'https://web-project-frontend-sandy.vercel.app'
 }))
 
 app.use("/", index);
@@ -25,5 +25,5 @@ app.get("/", (_req, res) => {
 });
 
 app.listen(3000, () => {
-  console.log('Backend running on http://localhost:3000')
+  console.log('Backend running')
 })

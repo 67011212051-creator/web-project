@@ -1,11 +1,7 @@
-import { loadEnvFile } from 'node:process'
-import { join } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 
-loadEnvFile(join(__dirname, '.env'))
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+const supabaseUrl = "https://cbojksaekjksptonwtmp.supabase.co"
+const supabaseKey = "sb_publishable_E1metQXel63A9zRWCM8CSA_6owwQ3pH"
 
 if (!supabaseUrl || !supabaseKey) {
 	throw new Error(

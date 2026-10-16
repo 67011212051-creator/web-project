@@ -6,10 +6,11 @@ import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
+import { environment } from '../../../environments/environment';
 
 // พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = environment.apiUrl;
 const ROUTE_CACHE_KEY = 'route-planning-cache';
 
 const CONFIG = {
