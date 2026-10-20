@@ -60,7 +60,7 @@ export interface Order {
   customer_id: number;
   delivery_fee: number;
   qty: number;
-  date: string;
+  date?: string;
   customer?: Customer;
 }
 

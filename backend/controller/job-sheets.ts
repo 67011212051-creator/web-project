@@ -367,7 +367,7 @@ router.get("/code/:jobCode", async (req, res) => {
 router.post("/calculate", async (_req, res) => {
   const { data: orderRows, error: ordersError } = await dbconnect
     .from("orders")
-    .select("order_id, customer_id, delivery_fee, qty, date");
+    .select("order_id, customer_id, delivery_fee, qty");
 
   if (ordersError) {
     res.status(500).json({ error: ordersError.message });
