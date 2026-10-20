@@ -13,15 +13,38 @@ const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = environment.apiUrl;
 const ROUTE_CACHE_KEY = 'route-planning-cache';
 
-const CONFIG = {
-  SPEED_KMH: 30,
-  TIME_PER_STOP_MIN: 3,
-  MAX_ORDERS_PER_ROUTE: 3,
-  PRICE_PER_BOX: 65,
-  FOOD_COST_PER_BOX: 40,
-  RIDER_BASE_FEE: 15,
-  FUEL_RATE_PER_KM_BOX: 2,
-  MAX_DELIVERY_MIN: 60
+interface RouteSummary {
+  totalOrders: number;
+  totalRiders: number;
+  totalBoxes: number;
+  totalDistanceKm: number;
+  maxDurationMin: number;
+  sales: number;
+  foodCost: number;
+  deliveryDistanceCost: number;
+  riderBaseCost: number;
+  netProfit: number;
+  estimatedFinishTime: string;
+}
+
+interface RouteCalculationResponse {
+  jobSheets: JobSheet[];
+  summary: RouteSummary;
+  ordersSignature: string;
+}
+
+const EMPTY_SUMMARY: RouteSummary = {
+  totalOrders: 0,
+  totalRiders: 0,
+  totalBoxes: 0,
+  totalDistanceKm: 0,
+  maxDurationMin: 0,
+  sales: 0,
+  foodCost: 0,
+  deliveryDistanceCost: 0,
+  riderBaseCost: 0,
+  netProfit: 0,
+  estimatedFinishTime: '11:30 น.'
 };
 
 export interface Customer {
@@ -97,19 +120,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   jobSheets: JobSheet[] = [];
 
-  summary = {
-    totalOrders: 0,
-    totalRiders: 0,
-    totalBoxes: 0,
-    totalDistanceKm: 0,
-    maxDurationMin: 0,
-    sales: 0,
-    foodCost: 0,
-    deliveryDistanceCost: 0,
-    riderBaseCost: 0,
-    netProfit: 0,
-    estimatedFinishTime: '11:30 น.'
-  };
+  summary: RouteSummary = { ...EMPTY_SUMMARY };
 
   ngOnInit(): void { }
 
@@ -233,22 +244,20 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-  // --- 3. Routing Engine (Sweep Algorithm) ---
-  private async executeRouting(preloadedOrders?: Order[]): Promise<void> {
+  // --- 3. Backend route calculation ---
+  private async executeRouting(): Promise<void> {
     if (this.isLoading) return;
 
     this.isLoading = true;
 
     try {
-      const orders = preloadedOrders ?? await this.loadOrders();
-      const validOrders = orders.filter(
-        o => o.customer && Number.isFinite(o.customer.latitude) && Number.isFinite(o.customer.longitude) &&
-             o.customer.latitude !== 0 && o.customer.longitude !== 0
+      const result = await lastValueFrom(
+        this.http.post<RouteCalculationResponse>(`${API_BASE_URL}/job-sheets/calculate`, {})
       );
 
-      if (validOrders.length === 0) {
+      if (result.jobSheets.length === 0) {
         this.jobSheets = [];
-        this.calculateSummary();
+        this.summary = { ...result.summary };
         this.routeLayerGroup.clearLayers();
         this.isCalculated = false;
         this.isDispatched = false;
@@ -257,13 +266,13 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         return;
       }
 
-      this.jobSheets = this.computeSweepRoutes(validOrders);
-      this.calculateSummary();
+      this.jobSheets = result.jobSheets;
+      this.summary = result.summary;
 
       this.isCalculated = true;
       this.isDispatched = false;
 
-      this.saveCachedRoutes(this.getOrdersSignature(validOrders));
+      this.saveCachedRoutes(result.ordersSignature);
 
       await this.renderRoutesOnMap();
     } catch (error) {
@@ -272,121 +281,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     } finally {
       this.isLoading = false;
     }
-  }
-
-  /**
-   * Sweep Algorithm: จัดกลุ่มออเดอร์ตามมุมทิศทางรอบร้าน (Polar Angle) เพื่อแยกโซนอย่างเป็นระเบียบ
-   */
-  private computeSweepRoutes(orders: Order[]): JobSheet[] {
-    const unassigned = orders.map(o => ({ ...o }));
-
-    const ordersWithAngle = unassigned.map(o => {
-      const lat = o.customer!.latitude;
-      const lon = o.customer!.longitude;
-      const angle = Math.atan2(lat - MSU_CENTER[0], lon - MSU_CENTER[1]);
-      return { order: o, angle };
-    });
-
-    ordersWithAngle.sort((a, b) => a.angle - b.angle);
-    const sortedOrders = ordersWithAngle.map(item => item.order);
-
-    const jobSheets: JobSheet[] = [];
-    let riderIndex = 0;
-
-    while (sortedOrders.length > 0) {
-      let currentLoc: [number, number] = [MSU_CENTER[0], MSU_CENTER[1]];
-      let currentDistance = 0;
-      let currentTime = 0;
-      let currentBoxes = 0;
-      const stops: JobStop[] = [];
-
-      while (stops.length < CONFIG.MAX_ORDERS_PER_ROUTE && sortedOrders.length > 0) {
-        let nearestIdx = -1;
-        let shortestDist = Infinity;
-        let travelTime = 0;
-
-        for (let i = 0; i < sortedOrders.length; i++) {
-          const candidate = sortedOrders[i];
-          const dist = this.haversine(
-            currentLoc[0], currentLoc[1],
-            candidate.customer!.latitude, candidate.customer!.longitude
-          );
-          const tTime = (dist / CONFIG.SPEED_KMH) * 60;
-
-          if (currentTime + tTime + CONFIG.TIME_PER_STOP_MIN <= CONFIG.MAX_DELIVERY_MIN && dist < shortestDist) {
-            shortestDist = dist;
-            nearestIdx = i;
-            travelTime = tTime;
-          }
-        }
-
-        if (nearestIdx === -1) {
-          nearestIdx = 0;
-          const candidate = sortedOrders[nearestIdx];
-          shortestDist = this.haversine(currentLoc[0], currentLoc[1], candidate.customer!.latitude, candidate.customer!.longitude);
-          travelTime = (shortestDist / CONFIG.SPEED_KMH) * 60;
-        }
-
-        const [selected] = sortedOrders.splice(nearestIdx, 1);
-        const stopSeq = stops.length + 1;
-
-        stops.push({
-          order_id: selected.order_id,
-          stop_seq: stopSeq,
-          distance_km: Math.round(shortestDist * 100) / 100,
-          travel_time_min: travelTime,
-          delivery_time_min: CONFIG.TIME_PER_STOP_MIN,
-          latitude: selected.customer!.latitude,
-          longitude: selected.customer!.longitude,
-          order: selected
-        });
-
-        currentDistance += shortestDist;
-        currentTime += travelTime + CONFIG.TIME_PER_STOP_MIN;
-        currentBoxes += selected.qty;
-        currentLoc = [selected.customer!.latitude, selected.customer!.longitude];
-      }
-
-      if (stops.length === 0) break;
-
-      const distinctColor = this.getDistinctRouteColor(riderIndex);
-      const generatedRider: Rider = {
-        rider_id: riderIndex + 1,
-        rider_code: `RD${String(riderIndex + 1).padStart(2, '0')}`,
-        route_color: distinctColor,
-        max_orders: CONFIG.MAX_ORDERS_PER_ROUTE
-      };
-
-      const deliveryCost = CONFIG.RIDER_BASE_FEE + (currentDistance * currentBoxes * CONFIG.FUEL_RATE_PER_KM_BOX);
-      const sales = currentBoxes * CONFIG.PRICE_PER_BOX;
-      const foodCost = currentBoxes * CONFIG.FOOD_COST_PER_BOX;
-      const netProfit = sales - foodCost - deliveryCost;
-
-      const shortTime = Date.now().toString().slice(-6);
-      const rand = Math.floor(10 + Math.random() * 90);
-      const jobCode = `J-${shortTime}-${rand}-${generatedRider.rider_code}`.slice(0, 20);
-      const orderIds = stops.map(s => s.order_id);
-
-      jobSheets.push({
-        job_code: jobCode,
-        rider_id: generatedRider.rider_id,
-        rider: generatedRider,
-        distance_km: Math.round(currentDistance * 100) / 100,
-        duration_min: Math.round(currentTime),
-        rider_pay: Math.round(deliveryCost * 100) / 100,
-        total_boxes: currentBoxes,
-        total_orders: stops.length,
-        sales,
-        food_cost: foodCost,
-        net_profit: Math.round(netProfit * 100) / 100,
-        order_ids: orderIds,
-        stops
-      });
-
-      riderIndex++;
-    }
-
-    return jobSheets;
   }
 
   // --- 4. วาดเส้นตามถนนจริง OSRM (ขนานเกาะแนวถนน ไม่หลุดเลน) ---
@@ -399,7 +293,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
     for (let jobIdx = 0; jobIdx < totalRoutes; jobIdx++) {
       const job = this.jobSheets[jobIdx];
-      const routeColor = job.rider?.route_color || this.getDistinctRouteColor(jobIdx);
+      const routeColor = job.rider?.route_color || '#3a7bd5';
       const waypoints: L.LatLngTuple[] = [MSU_CENTER];
 
       job.stops.forEach((stop) => {
@@ -547,13 +441,16 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         );
         const currentSig = this.getOrdersSignature(validCurrentOrders);
 
-        if (data.ordersSignature && data.ordersSignature !== currentSig) {
+        if (
+          typeof data.ordersSignature === 'string' &&
+          data.ordersSignature !== currentSig
+        ) {
           sessionStorage.removeItem(ROUTE_CACHE_KEY);
           if (validCurrentOrders.length > 0) {
-            await this.executeRouting(validCurrentOrders);
+            await this.executeRouting();
           } else {
             this.jobSheets = [];
-            this.calculateSummary();
+            this.summary = { ...EMPTY_SUMMARY };
             this.routeLayerGroup.clearLayers();
             this.isCalculated = false;
             this.isDispatched = false;
@@ -690,74 +587,4 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     });
   }
 
-  private haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
-
-  private calculateSummary(): void {
-    let ordersCount = 0;
-    let boxesCount = 0;
-    let distanceKm = 0;
-    let maxTime = 0;
-    let sales = 0;
-    let foodCost = 0;
-
-    this.jobSheets.forEach(job => {
-      ordersCount += job.total_orders;
-      boxesCount += job.total_boxes;
-      distanceKm += job.distance_km;
-      sales += job.sales;
-      foodCost += job.food_cost;
-      if (job.duration_min > maxTime) maxTime = job.duration_min;
-    });
-
-    const riderCount = this.jobSheets.length;
-    const riderBaseCost = riderCount * CONFIG.RIDER_BASE_FEE;
-    const distanceCost = this.jobSheets.reduce((sum, j) => sum + (j.distance_km * j.total_boxes * CONFIG.FUEL_RATE_PER_KM_BOX), 0);
-    const netProfit = sales - foodCost - (distanceCost + riderBaseCost);
-
-    const finishDate = new Date();
-    finishDate.setHours(11, 30 + maxTime, 0);
-    const formattedMinutes = finishDate.getMinutes().toString().padStart(2, '0');
-
-    this.summary = {
-      totalOrders: ordersCount,
-      totalRiders: riderCount,
-      totalBoxes: boxesCount,
-      totalDistanceKm: Math.round(distanceKm * 10) / 10,
-      maxDurationMin: maxTime,
-      sales,
-      foodCost,
-      deliveryDistanceCost: Math.round(distanceCost * 10) / 10,
-      riderBaseCost,
-      netProfit: Math.round(netProfit * 100) / 100,
-      estimatedFinishTime: `${finishDate.getHours()}:${formattedMinutes} น.`
-    };
-  }
-
-  private getDistinctRouteColor(index: number): string {
-    const hue = (index * 137.508) % 360;
-    const saturation = 75 + (index % 3) * 7;
-    const lightness = 40 + (index % 2) * 8;
-    return this.hslToHex(hue, saturation, lightness);
-  }
-
-  private hslToHex(h: number, s: number, l: number): string {
-    s /= 100;
-    l /= 100;
-    const k = (n: number) => (n + h / 30) % 12;
-    const a = s * Math.min(l, 1 - l);
-    const f = (n: number) =>
-      l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    const toHex = (x: number) =>
-      Math.round(x * 255).toString(16).padStart(2, '0');
-    return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
-  }
 }
