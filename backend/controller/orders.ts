@@ -116,3 +116,100 @@ router.put("/update/:id", async (req, res) => {
 
   res.json(data);
 });
+
+router.post("/simulate", async (req, res) => {
+  const count = Math.min(Math.max(Math.floor(Number(req.body?.count)) || 25, 1), 50);
+  const clearOld = req.body?.clearOld === true;
+
+  const { data: customers, error: customersError } = await dbconnect
+    .from("customers")
+    .select("customer_id");
+
+  if (customersError) {
+    res.status(500).json({ error: customersError.message });
+    return;
+  }
+
+  if (!customers || customers.length === 0) {
+    res.status(400).json({ error: "ไม่มีลูกค้าในระบบสำหรับจำลองออเดอร์" });
+    return;
+  }
+
+  let eligibleCustomers = customers;
+  let existingOrderIds: number[] = [];
+
+  if (clearOld) {
+    const { data: existingOrders, error: existingOrdersError } = await dbconnect
+      .from("orders")
+      .select("order_id");
+
+    if (existingOrdersError) {
+      res.status(500).json({ error: existingOrdersError.message });
+      return;
+    }
+
+    existingOrderIds = (existingOrders ?? []).map(({ order_id }) => order_id);
+  } else {
+    const { data: existingOrders, error: existingOrdersError } = await dbconnect
+      .from("orders")
+      .select("customer_id");
+
+    if (existingOrdersError) {
+      res.status(500).json({ error: existingOrdersError.message });
+      return;
+    }
+
+    const usedCustomerIds = new Set((existingOrders ?? []).map(({ customer_id }) => customer_id));
+    eligibleCustomers = customers.filter(({ customer_id }) => !usedCustomerIds.has(customer_id));
+  }
+
+  if (eligibleCustomers.length === 0) {
+    res.status(400).json({ error: "ไม่มีลูกค้าที่ว่างสำหรับจำลองออเดอร์" });
+    return;
+  }
+
+  if (clearOld && existingOrderIds.length > 0) {
+    const { error: stopsError } = await dbconnect
+      .from("job_stops")
+      .delete()
+      .in("order_id", existingOrderIds);
+
+    if (stopsError) {
+      res.status(500).json({ error: stopsError.message });
+      return;
+    }
+
+    const { error: deleteOrdersError } = await dbconnect
+      .from("orders")
+      .delete()
+      .in("order_id", existingOrderIds);
+
+    if (deleteOrdersError) {
+      res.status(500).json({ error: deleteOrdersError.message });
+      return;
+    }
+  }
+
+  const shuffledCustomers = [...eligibleCustomers];
+  for (let i = shuffledCustomers.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const customer = shuffledCustomers[i]!;
+    shuffledCustomers[i] = shuffledCustomers[j]!;
+    shuffledCustomers[j] = customer;
+  }
+
+  const rows = shuffledCustomers.slice(0, count).map(({ customer_id }) => ({
+    customer_id,
+    qty: Math.floor(Math.random() * 3) + 1,
+    delivery_fee: 0,
+  }));
+
+  const { data, error } = await dbconnect.from("orders").insert(rows).select();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.status(201).json(data);
+});

@@ -35,13 +35,6 @@ export class SimulateOrderModalComponent {
     this.clearOld.set((event.target as HTMLInputElement).checked);
   }
 
-  // ทำทีละกลุ่ม ไม่ยิง request พร้อมกันทีเดียวทั้งหมด
-  private async runInBatches<T>(items: T[], size: number, fn: (item: T) => Promise<unknown>) {
-    for (let i = 0; i < items.length; i += size) {
-      await Promise.all(items.slice(i, i + size).map(fn));
-    }
-  }
-
   async start() {
     if (this.loading()) return;
 
@@ -60,28 +53,13 @@ export class SimulateOrderModalComponent {
 
     this.loading.set(true);
     try {
-      // 1) ลบออเดอร์เก่า
-      let done = 0;
-      await this.runInBatches(oldOrders, 5, async (o) => {
-        await lastValueFrom(
-          this.http.delete(`${environment.apiUrl}/orders/delete/${o.order_id}`, { responseType: 'text' })
-        );
-        this.progress.set(`กำลังลบออเดอร์เก่า ${++done}/${oldOrders.length}`);
-      });
-
-      // 2) เพิ่มออเดอร์ใหม่ (สุ่มลูกค้า + กล่อง 1-3)
-      const rows = this.shuffle(pool).slice(0, total).map((c) => ({
-      customer_id: c.customer_id,
-      order_date: new Date().toISOString(),
-      delivery_fee: 0,
-      qty: Math.floor(Math.random() * 3) + 1,
-    }));
-
-      done = 0;
-      await this.runInBatches(rows, 5, async (row) => {
-        await lastValueFrom(this.http.post(`${environment.apiUrl}/orders/add`, row));
-        this.progress.set(`กำลังสร้างออเดอร์ใหม่ ${++done}/${rows.length}`);
-      });
+      this.progress.set('กำลังจำลองออเดอร์...');
+      await lastValueFrom(
+        this.http.post(`${environment.apiUrl}/orders/simulate`, {
+          count: total,
+          clearOld: this.clearOld(),
+        })
+      );
     } catch (error: unknown) {
       console.error('Error simulating orders:', error);
       window.alert(
@@ -107,13 +85,4 @@ export class SimulateOrderModalComponent {
   maxCount = computed(() => Math.min(50, this.availableCustomers().length));
 
   effectiveCount = computed(() => Math.min(this.count(), this.maxCount()));
-
-  private shuffle<T>(items: T[]): T[] {
-    const a = [...items];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
 }

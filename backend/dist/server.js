@@ -25,6 +25,6 @@ exports.app.get("/", (_req, res) => {
     res.send("Hello World!!!");
 });
 exports.app.listen(3000, () => {
-    console.log('Backend running on http://localhost:3000');
+    console.log('Backend running on');
 });
 //# sourceMappingURL=server.js.map
