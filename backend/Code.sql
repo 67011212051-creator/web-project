@@ -21,7 +21,6 @@ CREATE TABLE public.orders (
   customer_id integer NOT NULL,
   delivery_fee numeric NOT NULL DEFAULT 0,
   qty smallint NOT NULL,
-  date date NOT NULL DEFAULT '2024-01-01'::date,
   CONSTRAINT orders_pkey PRIMARY KEY (order_id),
   CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(customer_id)
 );

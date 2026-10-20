@@ -20,7 +20,6 @@ type RouteOrder = {
   customer_id: number;
   delivery_fee: number;
   qty: number;
-  date: string;
   customer: {
     customer_id: number;
     name: string;
