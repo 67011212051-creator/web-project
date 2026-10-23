@@ -2,6 +2,10 @@ import {
   Component, OnInit, AfterViewInit, OnDestroy, ElementRef,
   inject, viewChild
 } from '@angular/core';
+import type {
+  Customer, Order, Rider, JobSheet,
+  RouteSummary, RouteCalculationResponse
+} from '../../../../models/route-planning-res';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { lastValueFrom } from 'rxjs';
@@ -12,26 +16,6 @@ import { environment } from '../../../environments/environment';
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = environment.apiUrl;
 const ROUTE_CACHE_KEY = 'route-planning-cache';
-
-interface RouteSummary {
-  totalOrders: number;
-  totalRiders: number;
-  totalBoxes: number;
-  totalDistanceKm: number;
-  maxDurationMin: number;
-  sales: number;
-  foodCost: number;
-  deliveryDistanceCost: number;
-  riderBaseCost: number;
-  netProfit: number;
-  estimatedFinishTime: string;
-}
-
-interface RouteCalculationResponse {
-  jobSheets: JobSheet[];
-  summary: RouteSummary;
-  ordersSignature: string;
-}
 
 const EMPTY_SUMMARY: RouteSummary = {
   totalOrders: 0,
@@ -46,57 +30,6 @@ const EMPTY_SUMMARY: RouteSummary = {
   netProfit: 0,
   estimatedFinishTime: '11:30 น.'
 };
-
-export interface Customer {
-  customer_id: number;
-  name: string;
-  phone: string;
-  latitude: number;
-  longitude: number;
-}
-
-export interface Order {
-  order_id: number;
-  customer_id: number;
-  delivery_fee: number;
-  qty: number;
-  date?: string;
-  customer?: Customer;
-}
-
-export interface Rider {
-  rider_id: number;
-  rider_code: string;
-  route_color: string;
-  max_orders?: number;
-}
-
-export interface JobStop {
-  order_id: number;
-  stop_seq: number;
-  distance_km: number;
-  travel_time_min: number;
-  delivery_time_min: number;
-  latitude: number;
-  longitude: number;
-  order?: Order;
-}
-
-export interface JobSheet {
-  job_code: string;
-  rider_id: number;
-  rider?: Rider;
-  distance_km: number;
-  duration_min: number;
-  rider_pay: number;
-  total_boxes: number;
-  total_orders: number;
-  sales: number;
-  food_cost: number;
-  net_profit: number;
-  order_ids?: number[]; // รองรับการเก็บรายการ Order ID
-  stops: JobStop[];
-}
 
 @Component({
   selector: 'app-route-planning',
@@ -118,8 +51,20 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   isCalculated = false;
   isDispatched = false;
 
-  jobSheets: JobSheet[] = [];
+  // เก็บลำดับอัลกอริทึมปัจจุบัน (0, 1, 2) สำหรับสลับเมื่อกดปุ่มคำนวณใหม่
+  currentAlgoIndex = 0;
+  readonly algoNames = [
+    'รูปแบบที่ 1: Nearest Neighbor (เลือกถนนจริงที่ใกล้จุดปัจจุบันที่สุด)',
+    'รูปแบบที่ 2: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)',
+    'รูปแบบที่ 3: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)',
+    'รูปแบบที่ 4: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)'
+  ];
+  currentAlgoName = this.algoNames[0];
+  excludedOrdersCount = 0;
+  invalidCoordCount = 0;
+  distanceSource: 'osrm' | 'fallback' | 'none' = 'none';
 
+  jobSheets: JobSheet[] = [];
   summary: RouteSummary = { ...EMPTY_SUMMARY };
 
   ngOnInit(): void { }
@@ -183,11 +128,13 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // --- 2. Action Handlers ---
   async onCalculateRoutes(): Promise<void> {
-    await this.executeRouting();
+    await this.executeRouting(0);
   }
 
   async onRecalculateRoutes(): Promise<void> {
-    await this.executeRouting();
+    // สลับอัลกอริทึมวนไปเรื่อยๆ 0 -> 1 -> 2 -> 3 -> 0
+    // ส่ง index ถัดไปเป็นพารามิเตอร์ และจะอัปเดต currentAlgoIndex ก็ต่อเมื่อคำนวณสำเร็จเท่านั้น
+    await this.executeRouting((this.currentAlgoIndex + 1) % this.algoNames.length);
   }
 
   async onConfirmDispatch(): Promise<void> {
@@ -195,7 +142,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       alert('กรุณาคำนวณเส้นทางก่อนกดยืนยันส่งงาน');
       return;
     }
-    
+
     this.isSaving = true;
 
     try {
@@ -245,15 +192,24 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   // --- 3. Backend route calculation ---
-  private async executeRouting(): Promise<void> {
+  private async executeRouting(algoIndex: number = this.currentAlgoIndex): Promise<void> {
     if (this.isLoading) return;
 
     this.isLoading = true;
 
     try {
+      // ส่ง algorithmIndex (0, 1, 2, 3) ไปให้ Backend คำนวณ
       const result = await lastValueFrom(
-        this.http.post<RouteCalculationResponse>(`${API_BASE_URL}/job-sheets/calculate`, {})
+        this.http.post<RouteCalculationResponse>(`${API_BASE_URL}/job-sheets/calculate`, {
+          algorithmIndex: algoIndex
+        })
       );
+
+      // คำนวณสำเร็จแล้ว จึงค่อยยืนยันลำดับอัลกอริทึมปัจจุบัน
+      this.currentAlgoIndex = algoIndex;
+      this.excludedOrdersCount = result.excludedOutOfRangeCount ?? 0;
+      this.invalidCoordCount = result.invalidCoordCount ?? 0;
+      this.distanceSource = result.distanceSource ?? 'none';
 
       if (result.jobSheets.length === 0) {
         this.jobSheets = [];
@@ -262,12 +218,17 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         this.isCalculated = false;
         this.isDispatched = false;
         sessionStorage.removeItem(ROUTE_CACHE_KEY);
-        alert('ไม่พบข้อมูลออเดอร์ที่มีพิกัดถูกต้องสำหรับการจัดสายส่ง');
+        alert(
+          this.excludedOrdersCount > 0
+            ? `ไม่มีออเดอร์ที่อยู่ในรัศมีให้บริการ 3 กม. (อยู่นอกรัศมี ${this.excludedOrdersCount} ออเดอร์)`
+            : 'ไม่พบข้อมูลออเดอร์สำหรับการจัดสายส่ง'
+        );
         return;
       }
 
       this.jobSheets = result.jobSheets;
       this.summary = result.summary;
+      this.currentAlgoName = result.algorithmName || this.algoNames[this.currentAlgoIndex];
 
       this.isCalculated = true;
       this.isDispatched = false;
@@ -332,7 +293,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
               <strong>จุดส่งที่ ${stop.stop_seq}</strong> (${job.rider?.rider_code})<br>
               ผู้รับ: ${stop.order?.customer?.name || '-'}<br>
               เบอร์: ${stop.order?.customer?.phone || '-'}<br>
-              ระยะทาง: ${stop.distance_km} กม.
+              ระยะทางถนน: ${stop.distance_km} กม.
             `);
         }
       });
@@ -358,7 +319,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
               lineJoin: 'round',
               lineCap: 'round'
             })
-              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ออเดอร์: #${ordersText}<br>ระยะทาง: ${job.distance_km} กม.`)
+              .bindPopup(`<b>สายส่งของ ${job.rider?.rider_code}</b> (${job.job_code})<br>ออเดอร์: #${ordersText}<br>ระยะทางถนนรวม: ${job.distance_km} กม.`)
               .addTo(this.routeLayerGroup);
           } else {
             const offsetWaypoints = this.offsetRoadCoords(waypoints, jobIdx, totalRoutes);
@@ -413,7 +374,12 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         summary: this.summary,
         isCalculated: this.isCalculated,
         isDispatched: this.isDispatched,
-        ordersSignature: signature
+        ordersSignature: signature,
+        currentAlgoIndex: this.currentAlgoIndex,
+        currentAlgoName: this.currentAlgoName,
+        excludedOrdersCount: this.excludedOrdersCount,
+        invalidCoordCount: this.invalidCoordCount,
+        distanceSource: this.distanceSource
       };
 
       sessionStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(cache));
@@ -465,6 +431,11 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       this.summary = data.summary;
       this.isCalculated = data.isCalculated ?? false;
       this.isDispatched = data.isDispatched ?? false;
+      this.currentAlgoIndex = data.currentAlgoIndex ?? 0;
+      this.currentAlgoName = data.currentAlgoName ?? this.algoNames[this.currentAlgoIndex];
+      this.excludedOrdersCount = data.excludedOrdersCount ?? 0;
+      this.invalidCoordCount = data.invalidCoordCount ?? 0;
+      this.distanceSource = data.distanceSource ?? 'none';
 
       if (this.isCalculated) {
         await this.renderRoutesOnMap();
@@ -586,5 +557,4 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       };
     });
   }
-
 }

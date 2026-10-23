@@ -1,10 +1,18 @@
-import { getCustomersResponse } from './get-customers-res';
-import { getOrdersResponse } from './get-orders-res';
+export interface Customer {
+  customer_id: number;
+  name: string;
+  phone: string;
+  latitude: number;
+  longitude: number;
+}
 
-export interface Order extends Omit<getOrdersResponse, 'round_id'> {
-  round_id?: number;
+export interface Order {
+  order_id: number;
+  customer_id: number;
+  delivery_fee: number;
+  qty: number;
   date?: string;
-  customer?: getCustomersResponse;
+  customer?: Customer;
 }
 
 export interface Rider {
@@ -37,5 +45,32 @@ export interface JobSheet {
   sales: number;
   food_cost: number;
   net_profit: number;
+  order_ids?: number[];
   stops: JobStop[];
+}
+
+export interface RouteSummary {
+  totalOrders: number;
+  totalRiders: number;
+  totalBoxes: number;
+  totalDistanceKm: number;
+  maxDurationMin: number;
+  sales: number;
+  foodCost: number;
+  deliveryDistanceCost: number;
+  riderBaseCost: number;
+  netProfit: number;
+  estimatedFinishTime: string;
+  onTime?: boolean;
+}
+
+export interface RouteCalculationResponse {
+  jobSheets: JobSheet[];
+  summary: RouteSummary;
+  ordersSignature: string;
+  algorithmIndex?: number;
+  algorithmName?: string;
+  excludedOutOfRangeCount?: number;
+  invalidCoordCount?: number;
+  distanceSource?: 'osrm' | 'fallback' | 'none';
 }
