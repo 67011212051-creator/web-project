@@ -1,5 +1,5 @@
 import express from "express";
-import { dbconnect } from './../dbconnect'
+import { execute, queryRows } from "../dbconnect";
 
 export const router = express.Router();
 
@@ -11,38 +11,21 @@ router.delete("/delete/:id", async (req, res) => {
     return;
   }
 
-  const { data: orders, error: ordersError } = await dbconnect
-    .from("orders")
-    .select("order_id")
-    .eq("customer_id", customerId)
-    .limit(1);
-
-  if (ordersError) {
-    res.status(500).json({ error: ordersError.message });
-    return;
-  }
+  const orders = await queryRows(
+    "SELECT order_id FROM orders WHERE customer_id = ? LIMIT 1",
+    [customerId],
+  );
 
   if (orders?.length) {
     res.status(409).json({ error: "Customer has related orders" });
     return;
   }
 
-  const { data, error } = await dbconnect.from("customers")
-    .delete()
-    .eq("customer_id", customerId)
-    .select("customer_id");
-
-  if (error) {
-    if (error.code === "23503") {
-      res.status(409).json({ error: "Customer has related orders" });
-      return;
-    }
-
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
-  res.json(data);
+  const result = await execute(
+    "DELETE FROM customers WHERE customer_id = ?",
+    [customerId],
+  );
+  res.json(result.affectedRows > 0 ? [{ customer_id: customerId }] : []);
 });
 
 router.post("/add", async (req, res) => {
@@ -53,22 +36,14 @@ router.post("/add", async (req, res) => {
 
   const { name, phone, latitude, longitude } = req.body;
 
-  const { data, error } = await dbconnect.from("customers")
-    .insert([
-      {
-        name,
-        phone,
-        latitude,
-        longitude
-      }
-    ])
-    .select();
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
+  const result = await execute(
+    "INSERT INTO customers (name, phone, latitude, longitude) VALUES (?, ?, ?, ?)",
+    [name, phone, latitude, longitude],
+  );
+  const data = await queryRows(
+    "SELECT * FROM customers WHERE customer_id = ?",
+    [result.insertId],
+  );
   res.status(201).json(data);
 });
 
@@ -82,20 +57,12 @@ router.put("/update/:id", async (req, res) => {
 
   const { name, phone, latitude, longitude } = req.body;
 
-  const { data, error } = await dbconnect.from("customers")
-    .update({
-      name,
-      phone,
-      latitude,
-      longitude
-    })
-    .eq("customer_id", customerId)
-    .select();
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
+  await execute(
+    "UPDATE customers SET name = ?, phone = ?, latitude = ?, longitude = ? WHERE customer_id = ?",
+    [name, phone, latitude, longitude, customerId],
+  );
+  const data = await queryRows("SELECT * FROM customers WHERE customer_id = ?", [
+    customerId,
+  ]);
   res.json(data);
 });

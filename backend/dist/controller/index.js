@@ -5,17 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.router = void 0;
 const express_1 = __importDefault(require("express"));
-const dbconnect_1 = require("./../dbconnect");
+const dbconnect_1 = require("../dbconnect");
 exports.router = express_1.default.Router();
 exports.router.get('/', (req, res) => {
     res.send('Get in index.ts');
 });
 const getAllRows = (table) => async (_req, res) => {
-    const { data, error } = await dbconnect_1.dbconnect.from(table).select('*');
-    if (error) {
-        res.status(500).json({ error: error.message });
-        return;
-    }
+    const data = await (0, dbconnect_1.queryRows)(`SELECT * FROM \`${table}\``);
     res.json(data);
 };
 exports.router.get('/customers', getAllRows('customers'));

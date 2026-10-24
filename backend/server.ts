@@ -22,6 +22,20 @@ app.get("/", (_req, res) => {
   res.send("Hello World!!!");
 });
 
+app.use(
+  (
+    error: unknown,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error(error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  },
+);
+
 app.listen(3000, () => {
   console.log('Backend running')
 })

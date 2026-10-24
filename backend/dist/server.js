@@ -22,6 +22,12 @@ exports.app.use("/job-sheets", job_sheets_1.router);
 exports.app.get("/", (_req, res) => {
     res.send("Hello World!!!");
 });
+exports.app.use((error, _req, res, _next) => {
+    console.error(error);
+    res.status(500).json({
+        error: error instanceof Error ? error.message : "Internal server error",
+    });
+});
 exports.app.listen(3000, () => {
     console.log('Backend running');
 });

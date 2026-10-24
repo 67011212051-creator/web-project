@@ -1,5 +1,5 @@
 import express from "express";
-import { dbconnect } from './../dbconnect'
+import { execute, queryRows } from "../dbconnect";
 
 export const router = express.Router();
 
@@ -11,24 +11,16 @@ router.delete("/delete/:id", async (req, res) => {
     return;
   }
 
-  const { data, error } = await dbconnect
-    .from("job_stops")
-    .delete()
-    .eq("order_id", orderId)
-    .select("order_id");
-
-  const { data: orderData, error: orderError } = await dbconnect
-    .from("orders")
-    .delete()
-    .eq("order_id", orderId)
-    .select("order_id");
-
-  if (error || orderError) {
-    const errorMessage = error?.message || orderError?.message || "Unknown error";
-    res.status(500).json({ error: errorMessage });
-    return;
-  }
-
+  const data = await queryRows(
+    "SELECT order_id FROM job_stops WHERE order_id = ?",
+    [orderId],
+  );
+  const orderData = await queryRows(
+    "SELECT order_id FROM orders WHERE order_id = ?",
+    [orderId],
+  );
+  await execute("DELETE FROM job_stops WHERE order_id = ?", [orderId]);
+  await execute("DELETE FROM orders WHERE order_id = ?", [orderId]);
   res.json({ job_stops: data, orders: orderData });
 })
 
@@ -40,15 +32,10 @@ router.delete("/deleteByCustomerId/:customerId", async (req, res) => {
     return;
   }
 
-  const { data: customerOrderIds, error: customerOrderIdsError } = await dbconnect
-    .from("orders")
-    .select("order_id")
-    .eq("customer_id", customerId);
-
-  if (customerOrderIdsError) {
-    res.status(500).json({ error: customerOrderIdsError.message });
-    return;
-  }
+  const customerOrderIds = await queryRows(
+    "SELECT order_id FROM orders WHERE customer_id = ?",
+    [customerId],
+  );
 
   const orderIds = (customerOrderIds ?? []).map(({ order_id }) => order_id);
 
@@ -57,43 +44,33 @@ router.delete("/deleteByCustomerId/:customerId", async (req, res) => {
     return;
   }
 
-  const { data, error } = await dbconnect
-    .from("job_stops")
-    .delete()
-    .in("order_id", orderIds)
-    .select("order_id");
-
-  const { data: orderData, error: orderError } = await dbconnect
-    .from("orders")
-    .delete()
-    .eq("customer_id", customerId)
-    .select("order_id");
-
-  if (error || orderError) {
-    const errorMessage = error?.message || orderError?.message || "Unknown error";
-    res.status(500).json({ error: errorMessage });
-    return;
-  }
+  const placeholders = orderIds.map(() => "?").join(", ");
+  const data = await queryRows(
+    `SELECT order_id FROM job_stops WHERE order_id IN (${placeholders})`,
+    orderIds,
+  );
+  const orderData = await queryRows(
+    "SELECT order_id FROM orders WHERE customer_id = ?",
+    [customerId],
+  );
+  await execute(
+    `DELETE FROM job_stops WHERE order_id IN (${placeholders})`,
+    orderIds,
+  );
+  await execute("DELETE FROM orders WHERE customer_id = ?", [customerId]);
 
   res.json({ job_stops: data, orders: orderData });
 });
 
 router.post("/add", async (req, res) => {
   const { customer_id,  qty } = req.body;
-  const { data, error } = await dbconnect.from("orders")
-    .insert([
-      {
-        customer_id,
-        qty
-      }
-    ])
-    .select();
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
+  const result = await execute(
+    "INSERT INTO orders (customer_id, qty) VALUES (?, ?)",
+    [customer_id, qty],
+  );
+  const data = await queryRows("SELECT * FROM orders WHERE order_id = ?", [
+    result.insertId,
+  ]);
   res.status(201).json(data);
 });
 
@@ -101,19 +78,13 @@ router.put("/update/:id", async (req, res) => {
   const orderId = Number(req.params.id);
   const { customer_id,  qty } = req.body;
 
-  const { data, error } = await dbconnect.from("orders")
-    .update({
-      customer_id,
-      qty
-    })
-    .eq("order_id", orderId)
-    .select();
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
+  await execute(
+    "UPDATE orders SET customer_id = ?, qty = ? WHERE order_id = ?",
+    [customer_id, qty, orderId],
+  );
+  const data = await queryRows("SELECT * FROM orders WHERE order_id = ?", [
+    orderId,
+  ]);
   res.json(data);
 });
 
@@ -121,14 +92,7 @@ router.post("/simulate", async (req, res) => {
   const count = Math.min(Math.max(Math.floor(Number(req.body?.count)) || 25, 1), 50);
   const clearOld = req.body?.clearOld === true;
 
-  const { data: customers, error: customersError } = await dbconnect
-    .from("customers")
-    .select("customer_id");
-
-  if (customersError) {
-    res.status(500).json({ error: customersError.message });
-    return;
-  }
+  const customers = await queryRows("SELECT customer_id FROM customers");
 
   if (!customers || customers.length === 0) {
     res.status(400).json({ error: "ไม่มีลูกค้าในระบบสำหรับจำลองออเดอร์" });
@@ -139,25 +103,11 @@ router.post("/simulate", async (req, res) => {
   let existingOrderIds: number[] = [];
 
   if (clearOld) {
-    const { data: existingOrders, error: existingOrdersError } = await dbconnect
-      .from("orders")
-      .select("order_id");
-
-    if (existingOrdersError) {
-      res.status(500).json({ error: existingOrdersError.message });
-      return;
-    }
+    const existingOrders = await queryRows("SELECT order_id FROM orders");
 
     existingOrderIds = (existingOrders ?? []).map(({ order_id }) => order_id);
   } else {
-    const { data: existingOrders, error: existingOrdersError } = await dbconnect
-      .from("orders")
-      .select("customer_id");
-
-    if (existingOrdersError) {
-      res.status(500).json({ error: existingOrdersError.message });
-      return;
-    }
+    const existingOrders = await queryRows("SELECT customer_id FROM orders");
 
     const usedCustomerIds = new Set((existingOrders ?? []).map(({ customer_id }) => customer_id));
     eligibleCustomers = customers.filter(({ customer_id }) => !usedCustomerIds.has(customer_id));
@@ -169,25 +119,15 @@ router.post("/simulate", async (req, res) => {
   }
 
   if (clearOld && existingOrderIds.length > 0) {
-    const { error: stopsError } = await dbconnect
-      .from("job_stops")
-      .delete()
-      .in("order_id", existingOrderIds);
-
-    if (stopsError) {
-      res.status(500).json({ error: stopsError.message });
-      return;
-    }
-
-    const { error: deleteOrdersError } = await dbconnect
-      .from("orders")
-      .delete()
-      .in("order_id", existingOrderIds);
-
-    if (deleteOrdersError) {
-      res.status(500).json({ error: deleteOrdersError.message });
-      return;
-    }
+    const placeholders = existingOrderIds.map(() => "?").join(", ");
+    await execute(
+      `DELETE FROM job_stops WHERE order_id IN (${placeholders})`,
+      existingOrderIds,
+    );
+    await execute(
+      `DELETE FROM orders WHERE order_id IN (${placeholders})`,
+      existingOrderIds,
+    );
   }
 
   const shuffledCustomers = [...eligibleCustomers];
@@ -204,12 +144,17 @@ router.post("/simulate", async (req, res) => {
     delivery_fee: 0,
   }));
 
-  const { data, error } = await dbconnect.from("orders").insert(rows).select();
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
+  const data = [];
+  for (const row of rows) {
+    const result = await execute(
+      "INSERT INTO orders (customer_id, qty, delivery_fee) VALUES (?, ?, ?)",
+      [row.customer_id, row.qty, row.delivery_fee],
+    );
+    const [inserted] = await queryRows(
+      "SELECT * FROM orders WHERE order_id = ?",
+      [result.insertId],
+    );
+    if (inserted) data.push(inserted);
   }
-
   res.status(201).json(data);
 });
