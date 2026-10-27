@@ -44,15 +44,14 @@ const ROUTE_CONFIG = {
 };
 
 const ALGO_NAMES = [
-  "รูปแบบที่ 1: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)",
-  "รูปแบบที่ 2: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)",
-  "รูปแบบที่ 3: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)",
+  "รูปแบบที่ 1: คุ้มสุด กำไรเน้นๆ (รวมออเดอร์ทางเดียวกัน ประหยัดไรเดอร์และค่าน้ำมัน)",
+  "รูปแบบที่ 2: ส่งด่วน ทันใจลูกค้า (กระจายงานช่วยกันวิ่ง ถึงไวทุกบ้าน)",
 ];
 const ALGO_COUNT = ALGO_NAMES.length;
 
 type DistanceSource = "osrm" | "fallback" | "none";
-const DEADLINE_MIN = 12 * 60 + 30; // ต้องส่งครบภายใน 12:30 น.
-const START_MIN = 11 * 60 + 30; // ออกเดินทาง 11:30 น.
+const DEADLINE_MIN = 12 * 60 + 30;
+const START_MIN = 11 * 60 + 30;
 
 type RouteOrder = {
   order_id: number;
@@ -100,7 +99,6 @@ type RouteJobSheet = {
   stops: RouteStop[];
 };
 
-// ใช้สำหรับตรวจสอบขอบเขตวงกลมรัศมี 3 กม. รอบร้านค้า
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const earthRadiusKm = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -114,10 +112,6 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/**
- * เงื่อนไขข้อ 2: ดึงตารางระยะทางตามถนนจริง (Road Distance Matrix) จาก OSRM Table API
- * Index 0 = ร้านค้า (MSU_CENTER), Index 1..N = ลูกค้าแต่ละคนตามลำดับใน orders
- */
 async function fetchRoadDistanceMatrix(
   orders: RouteOrder[]
 ): Promise<{ matrix: number[][]; source: DistanceSource }> {
@@ -134,9 +128,6 @@ async function fetchRoadDistanceMatrix(
     );
 
   if (coords.length > OSRM_MAX_COORDS) {
-    console.warn(
-      `OSRM table limit exceeded (${coords.length} > ${OSRM_MAX_COORDS}), using estimated road factor`
-    );
     return { matrix: estimated(), source: "fallback" };
   }
 
@@ -165,7 +156,6 @@ async function fetchRoadDistanceMatrix(
     );
     return { matrix, source: "osrm" };
   } catch (err) {
-    console.warn("OSRM Table API failed, using estimated road factor:", err);
     return { matrix: estimated(), source: "fallback" };
   } finally {
     clearTimeout(timer);
@@ -199,134 +189,79 @@ function getOrdersSignature(orders: RouteOrder[]): string {
     .join("|");
 }
 
-/**
- * อัลกอริทึมที่ 1 (index = 0): Sweep Algorithm (แบ่งโซนตามมุมทิศทางรอบร้าน + เรียงจุดในโซนด้วยระยะถนนจริง)
- */
-function runSweepRoad(
-  orders: RouteOrder[],
-  roadMatrix: number[][]
-): number[][] {
-  const nodesWithAngle = orders.map((order, idx) => ({
-    node: idx + 1,
-    angle: Math.atan2(
-      order.customer.latitude - MSU_CENTER[0],
-      order.customer.longitude - MSU_CENTER[1]
-    ),
-  }));
-
-  nodesWithAngle.sort((a, b) => a.angle - b.angle);
-
-  // หมุนจุดเริ่มไปอยู่หลัง "ช่องว่างมุมที่กว้างที่สุด" เพื่อไม่ให้รอยต่อ ±π
-  // ตัดกลุ่มลูกค้าที่อยู่ติดกันออกจากกัน
-  if (nodesWithAngle.length > 1) {
-    let maxGap = -1;
-    let startIdx = 0;
-    for (let i = 0; i < nodesWithAngle.length; i++) {
-      const cur = nodesWithAngle[i]!.angle;
-      const next =
-        i === nodesWithAngle.length - 1
-          ? nodesWithAngle[0]!.angle + 2 * Math.PI
-          : nodesWithAngle[i + 1]!.angle;
-      if (next - cur > maxGap) {
-        maxGap = next - cur;
-        startIdx = (i + 1) % nodesWithAngle.length;
-      }
-    }
-    nodesWithAngle.push(...nodesWithAngle.splice(0, startIdx));
+function calcRouteDistance(route: number[], roadMatrix: number[][]): number {
+  let dist = 0;
+  let curr = 0;
+  for (const node of route) {
+    dist += roadMatrix[curr]![node]!;
+    curr = node;
   }
-
-  const sortedNodes = nodesWithAngle.map((item) => item.node);
-  const routes: number[][] = [];
-
-  while (sortedNodes.length > 0) {
-    const cluster = sortedNodes.splice(0, ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE);
-    const orderedRoute: number[] = [];
-    let currNode = 0;
-    let currTime = 0;
-
-    while (cluster.length > 0) {
-      let bestIdx = 0;
-      let shortestRoadDist = Infinity;
-
-      for (let i = 0; i < cluster.length; i++) {
-        const candidateNode = cluster[i]!;
-        const roadDist = roadMatrix[currNode]![candidateNode]!;
-        if (roadDist < shortestRoadDist) {
-          shortestRoadDist = roadDist;
-          bestIdx = i;
-        }
-      }
-
-      const [nextNode] = cluster.splice(bestIdx, 1);
-      if (nextNode === undefined) break;
-
-      const tTime = (shortestRoadDist / ROUTE_CONFIG.SPEED_KMH) * 60;
-
-      if (
-        orderedRoute.length > 0 &&
-        currTime + tTime + ROUTE_CONFIG.TIME_PER_STOP_MIN >
-          ROUTE_CONFIG.MAX_DELIVERY_MIN
-      ) {
-        sortedNodes.unshift(nextNode, ...cluster);
-        break;
-      }
-
-      orderedRoute.push(nextNode);
-      currTime += tTime + ROUTE_CONFIG.TIME_PER_STOP_MIN;
-      currNode = nextNode;
-    }
-
-    if (orderedRoute.length > 0) routes.push(orderedRoute);
-  }
-
-  return routes;
+  return dist;
 }
 
-/**
- * อัลกอริทึมที่ 2 (index = 1): Clarke-Wright Savings Algorithm โดยใช้ระยะทางถนนจริง
- */
-function runClarkeWrightRoad(
+function calcRouteDuration(route: number[], roadMatrix: number[][]): number {
+  return (
+    (calcRouteDistance(route, roadMatrix) / ROUTE_CONFIG.SPEED_KMH) * 60 +
+    route.length * ROUTE_CONFIG.TIME_PER_STOP_MIN
+  );
+}
+
+function getPermutations(arr: number[]): number[][] {
+  return arr.length <= 1
+    ? [arr]
+    : arr.flatMap((x, i) =>
+        getPermutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map((p) => [
+          x,
+          ...p,
+        ])
+      );
+}
+
+function optimizeStopsOrder(route: number[], roadMatrix: number[][]): number[] {
+  if (route.length <= 1) return route;
+  let best = route;
+  let bestDist = calcRouteDistance(route, roadMatrix);
+  for (const p of getPermutations(route)) {
+    const d = calcRouteDistance(p, roadMatrix);
+    if (d < bestDist - 1e-9) {
+      best = p;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+// โหมดที่ 1: กำไรสูงสุด (Max Profit)
+function runMaxProfitRoad(
   orders: RouteOrder[],
   roadMatrix: number[][]
 ): number[][] {
   const n = orders.length;
-  const routes: number[][] = Array.from({ length: n }, (_, i) => [i + 1]);
+  let routes: number[][] = Array.from({ length: n }, (_, i) => [i + 1]);
 
-  // คำนวณค่าความประหยัดระยะทางถนนจริง S(i,j) = d(0,i) + d(0,j) - d(i,j)
   const savings: { i: number; j: number; s: number }[] = [];
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= n; j++) {
       if (i !== j) {
-        const s =
-          roadMatrix[0]![i]! + roadMatrix[0]![j]! - roadMatrix[i]![j]!;
+        const s = roadMatrix[0]![i]! + roadMatrix[0]![j]! - roadMatrix[i]![j]!;
         if (Number.isFinite(s)) savings.push({ i, j, s });
       }
     }
   }
-
   savings.sort((a, b) => b.s - a.s);
-
-  const calcRouteTime = (route: number[]): number => {
-    let time = 0;
-    let curr = 0;
-    for (const node of route) {
-      time +=
-        (roadMatrix[curr]![node]! / ROUTE_CONFIG.SPEED_KMH) * 60 +
-        ROUTE_CONFIG.TIME_PER_STOP_MIN;
-      curr = node;
-    }
-    return time;
-  };
 
   for (const { i, j } of savings) {
     const rI = routes.findIndex((r) => r[r.length - 1] === i);
     const rJ = routes.findIndex((r) => r[0] === j);
 
     if (rI !== -1 && rJ !== -1 && rI !== rJ) {
-      const merged = [...routes[rI]!, ...routes[rJ]!];
+      const merged = optimizeStopsOrder(
+        [...routes[rI]!, ...routes[rJ]!],
+        roadMatrix
+      );
       if (
         merged.length <= ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE &&
-        calcRouteTime(merged) <= ROUTE_CONFIG.MAX_DELIVERY_MIN
+        calcRouteDuration(merged, roadMatrix) <= ROUTE_CONFIG.MAX_DELIVERY_MIN
       ) {
         routes[rI] = merged;
         routes.splice(rJ, 1);
@@ -334,69 +269,19 @@ function runClarkeWrightRoad(
     }
   }
 
-  return routes;
-}
-
-/**
- * อัลกอริทึมที่ 3 (index = 2): Clarke-Wright + Local Search
- */
-function runClarkeWrightLocalSearch(
-  orders: RouteOrder[],
-  roadMatrix: number[][]
-): number[][] {
   const boxesOf = (node: number) => orders[node - 1]!.qty;
-
-  const distanceOf = (route: number[]): number => {
-    let dist = 0;
-    let curr = 0;
-    for (const node of route) {
-      dist += roadMatrix[curr]![node]!;
-      curr = node;
-    }
-    return dist;
-  };
-
-  const durationOf = (route: number[]): number =>
-    (distanceOf(route) / ROUTE_CONFIG.SPEED_KMH) * 60 +
-    route.length * ROUTE_CONFIG.TIME_PER_STOP_MIN;
-
   const costOf = (route: number[]): number => {
     if (route.length === 0) return 0;
     const boxes = route.reduce((sum, node) => sum + boxesOf(node), 0);
     return (
       ROUTE_CONFIG.RIDER_BASE_FEE +
-      distanceOf(route) * boxes * ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX
+      calcRouteDistance(route, roadMatrix) *
+        boxes *
+        ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX
     );
   };
 
-  const permutations = (arr: number[]): number[][] =>
-    arr.length <= 1
-      ? [arr]
-      : arr.flatMap((x, i) =>
-          permutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map((p) => [
-            x,
-            ...p,
-          ])
-        );
-
-  const bestOrder = (route: number[]): number[] => {
-    if (route.length <= 1) return route;
-    let best = route;
-    let bestDist = distanceOf(route);
-    for (const p of permutations(route)) {
-      const d = distanceOf(p);
-      if (d < bestDist - 1e-9) {
-        best = p;
-        bestDist = d;
-      }
-    }
-    return best;
-  };
-
-  const maxStops = ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE;
-  const maxMin = ROUTE_CONFIG.MAX_DELIVERY_MIN;
-
-  let routes = runClarkeWrightRoad(orders, roadMatrix).map(bestOrder);
+  routes = routes.map((r) => optimizeStopsOrder(r, roadMatrix));
 
   let improved = true;
   let guard = 0;
@@ -410,12 +295,18 @@ function runClarkeWrightLocalSearch(
         const rb = routes[b]!;
         const before = costOf(ra) + costOf(rb);
 
-        // relocate: ย้ายจุด i จากสาย a ไปสาย b
-        if (rb.length < maxStops) {
+        if (rb.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE) {
           for (let i = 0; i < ra.length && !improved; i++) {
-            const newA = bestOrder(ra.filter((_, k) => k !== i));
-            const newB = bestOrder([...rb, ra[i]!]);
-            if (durationOf(newB) > maxMin) continue;
+            const newA = optimizeStopsOrder(
+              ra.filter((_, k) => k !== i),
+              roadMatrix
+            );
+            const newB = optimizeStopsOrder([...rb, ra[i]!], roadMatrix);
+            if (
+              calcRouteDuration(newB, roadMatrix) >
+              ROUTE_CONFIG.MAX_DELIVERY_MIN
+            )
+              continue;
             if (costOf(newA) + costOf(newB) < before - 1e-6) {
               routes[a] = newA;
               routes[b] = newB;
@@ -424,13 +315,24 @@ function runClarkeWrightLocalSearch(
           }
         }
 
-        // swap: สลับจุด i ของสาย a กับจุด j ของสาย b
         if (a < b) {
           for (let i = 0; i < ra.length && !improved; i++) {
             for (let j = 0; j < rb.length && !improved; j++) {
-              const newA = bestOrder(ra.map((n, k) => (k === i ? rb[j]! : n)));
-              const newB = bestOrder(rb.map((n, k) => (k === j ? ra[i]! : n)));
-              if (durationOf(newA) > maxMin || durationOf(newB) > maxMin) continue;
+              const newA = optimizeStopsOrder(
+                ra.map((node, k) => (k === i ? rb[j]! : node)),
+                roadMatrix
+              );
+              const newB = optimizeStopsOrder(
+                rb.map((node, k) => (k === j ? ra[i]! : node)),
+                roadMatrix
+              );
+              if (
+                calcRouteDuration(newA, roadMatrix) >
+                  ROUTE_CONFIG.MAX_DELIVERY_MIN ||
+                calcRouteDuration(newB, roadMatrix) >
+                  ROUTE_CONFIG.MAX_DELIVERY_MIN
+              )
+                continue;
               if (costOf(newA) + costOf(newB) < before - 1e-6) {
                 routes[a] = newA;
                 routes[b] = newB;
@@ -446,6 +348,156 @@ function runClarkeWrightLocalSearch(
   }
 
   return routes;
+}
+
+// โหมดที่ 2: ส่งเร็วที่สุด (Fastest Delivery)
+function runFastestDeliveryRoad(
+  orders: RouteOrder[],
+  roadMatrix: number[][]
+): number[][] {
+  const n = orders.length;
+  const targetRiders = Math.min(n, Math.max(1, Math.ceil(n / 2)));
+
+  const sortedByAngle = orders
+    .map((o, idx) => ({
+      node: idx + 1,
+      angle: Math.atan2(
+        o.customer.latitude - MSU_CENTER[0],
+        o.customer.longitude - MSU_CENTER[1]
+      ),
+    }))
+    .sort((a, b) => a.angle - b.angle)
+    .map((item) => item.node);
+
+  const routes: number[][] = [];
+  const assigned = new Set<number>();
+
+  const step = Math.max(1, Math.floor(sortedByAngle.length / targetRiders));
+  for (let i = 0; i < sortedByAngle.length && routes.length < targetRiders; i += step) {
+    const seedNode = sortedByAngle[i]!;
+    routes.push([seedNode]);
+    assigned.add(seedNode);
+  }
+
+  const remaining = sortedByAngle.filter((node) => !assigned.has(node));
+
+  while (remaining.length > 0) {
+    let bestRemIdx = -1;
+    let bestRouteIdx = -1;
+    let bestNewDuration = Infinity;
+
+    for (let rIdx = 0; rIdx < routes.length; rIdx++) {
+      const route = routes[rIdx]!;
+      if (route.length >= ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE) continue;
+
+      for (let i = 0; i < remaining.length; i++) {
+        const candidate = remaining[i]!;
+        const trialRoute = optimizeStopsOrder([...route, candidate], roadMatrix);
+        const newDur = calcRouteDuration(trialRoute, roadMatrix);
+
+        if (
+          newDur <= ROUTE_CONFIG.MAX_DELIVERY_MIN &&
+          newDur < bestNewDuration
+        ) {
+          bestNewDuration = newDur;
+          bestRemIdx = i;
+          bestRouteIdx = rIdx;
+        }
+      }
+    }
+
+    if (bestRemIdx !== -1 && bestRouteIdx !== -1) {
+      const [picked] = remaining.splice(bestRemIdx, 1);
+      routes[bestRouteIdx] = optimizeStopsOrder(
+        [...routes[bestRouteIdx]!, picked!],
+        roadMatrix
+      );
+    } else {
+      const [picked] = remaining.splice(0, 1);
+      if (picked !== undefined) routes.push([picked]);
+    }
+  }
+
+  let improved = true;
+  let guard = 0;
+  while (improved && guard++ < 200) {
+    improved = false;
+
+    for (let a = 0; a < routes.length && !improved; a++) {
+      for (let b = 0; b < routes.length && !improved; b++) {
+        if (a === b) continue;
+        const ra = routes[a]!;
+        const rb = routes[b]!;
+        const durA = calcRouteDuration(ra, roadMatrix);
+        const durB = calcRouteDuration(rb, roadMatrix);
+        const prevMax = Math.max(durA, durB);
+        const prevSum = durA + durB;
+
+        if (rb.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE && ra.length > 1) {
+          for (let i = 0; i < ra.length && !improved; i++) {
+            const newA = optimizeStopsOrder(
+              ra.filter((_, k) => k !== i),
+              roadMatrix
+            );
+            const newB = optimizeStopsOrder([...rb, ra[i]!], roadMatrix);
+            const newDurA = calcRouteDuration(newA, roadMatrix);
+            const newDurB = calcRouteDuration(newB, roadMatrix);
+
+            if (newDurB > ROUTE_CONFIG.MAX_DELIVERY_MIN) continue;
+
+            const newMax = Math.max(newDurA, newDurB);
+            const newSum = newDurA + newDurB;
+
+            if (
+              newMax < prevMax - 1e-6 ||
+              (Math.abs(newMax - prevMax) <= 1e-6 && newSum < prevSum - 1e-6)
+            ) {
+              routes[a] = newA;
+              routes[b] = newB;
+              improved = true;
+            }
+          }
+        }
+
+        if (a < b) {
+          for (let i = 0; i < ra.length && !improved; i++) {
+            for (let j = 0; j < rb.length && !improved; j++) {
+              const newA = optimizeStopsOrder(
+                ra.map((node, k) => (k === i ? rb[j]! : node)),
+                roadMatrix
+              );
+              const newB = optimizeStopsOrder(
+                rb.map((node, k) => (k === j ? ra[i]! : node)),
+                roadMatrix
+              );
+              const newDurA = calcRouteDuration(newA, roadMatrix);
+              const newDurB = calcRouteDuration(newB, roadMatrix);
+
+              if (
+                newDurA > ROUTE_CONFIG.MAX_DELIVERY_MIN ||
+                newDurB > ROUTE_CONFIG.MAX_DELIVERY_MIN
+              )
+                continue;
+
+              const newMax = Math.max(newDurA, newDurB);
+              const newSum = newDurA + newDurB;
+
+              if (
+                newMax < prevMax - 1e-6 ||
+                (Math.abs(newMax - prevMax) <= 1e-6 && newSum < prevSum - 1e-6)
+              ) {
+                routes[a] = newA;
+                routes[b] = newB;
+                improved = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return routes.filter((r) => r.length > 0);
 }
 
 async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
@@ -470,24 +522,17 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
     };
   }
 
-  // 1. ดึงตารางระยะทางตามถนนจริงจาก OSRM Table API
   const { matrix: roadMatrix, source: distanceSource } =
     await fetchRoadDistanceMatrix(orders);
 
-  // 2. เลือกรันอัลกอริทึมตามลำดับที่ผู้ใช้กดปุ่ม (0, 1, 2)
-  let routeGroups: number[][] = [];
-  if (algoIndex === 0) {
-    routeGroups = runSweepRoad(orders, roadMatrix);
-  } else if (algoIndex === 1) {
-    routeGroups = runClarkeWrightRoad(orders, roadMatrix);
-  } else {
-    routeGroups = runClarkeWrightLocalSearch(orders, roadMatrix);
-  }
+  const routeGroups: number[][] =
+    algoIndex === 0
+      ? runMaxProfitRoad(orders, roadMatrix)
+      : runFastestDeliveryRoad(orders, roadMatrix);
 
-  // 3. สร้างใบงานและคำนวณต้นทุนจากระยะทางถนนจริง
   const jobSheets: RouteJobSheet[] = routeGroups.map(
     (routeNodeIndices, riderIndex) => {
-      let currentLocNode = 0; // 0 = ร้านค้า
+      let currentLocNode = 0;
       let currentDistance = 0;
       let currentTime = 0;
       let currentBoxes = 0;
@@ -740,7 +785,6 @@ router.post("/calculate", async (req, res) => {
       ];
     });
 
-    // เงื่อนไขข้อ 3: กรองเฉพาะลูกค้าที่อยู่ในรัศมี 3 กม. จากร้านค้า
     const inRangeOrders = allValidOrders.filter((order) => {
       const distFromShopKm = haversine(
         MSU_CENTER[0],

@@ -12,11 +12,9 @@ import { lastValueFrom } from 'rxjs';
 import * as L from 'leaflet';
 import { environment } from '../../../environments/environment';
 
-// พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = environment.apiUrl;
-// v2: ลำดับอัลกอริทึมเปลี่ยน (เหลือ 3 แบบ) จึงทิ้ง cache เก่าที่ index ไม่ตรงกัน
-const ROUTE_CACHE_KEY = 'route-planning-cache-v2';
+const ROUTE_CACHE_KEY = 'route-planning-cache-v4';
 
 const EMPTY_SUMMARY: RouteSummary = {
   totalOrders: 0,
@@ -52,12 +50,10 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   isCalculated = false;
   isDispatched = false;
 
-  // เก็บลำดับอัลกอริทึมปัจจุบัน (0, 1, 2) สำหรับสลับเมื่อกดปุ่มคำนวณใหม่
   currentAlgoIndex = 0;
   readonly algoNames = [
-    'รูปแบบที่ 1: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)',
-    'รูปแบบที่ 2: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)',
-    'รูปแบบที่ 3: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)'
+    'รูปแบบที่ 1: คุ้มสุด กำไรเน้นๆ (รวมออเดอร์ทางเดียวกัน ประหยัดไรเดอร์และค่าน้ำมัน)',
+    'รูปแบบที่ 2: ส่งด่วน ทันใจลูกค้า (กระจายงานช่วยกันวิ่ง ถึงไวทุกบ้าน)'
   ];
   currentAlgoName = this.algoNames[0];
   excludedOrdersCount = 0;
@@ -66,6 +62,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   jobSheets: JobSheet[] = [];
   summary: RouteSummary = { ...EMPTY_SUMMARY };
+  private ordersSignature = '';
 
   ngOnInit(): void { }
 
@@ -79,7 +76,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.map?.remove();
   }
 
-  // --- Helper สำหรับดึงรหัสออเดอร์มาแสดงในหน้า HTML ---
   getOrderIds(job: JobSheet): string {
     if (job.order_ids && job.order_ids.length > 0) {
       return job.order_ids.join(', ');
@@ -90,7 +86,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     return '';
   }
 
-  // --- 1. จัดการแผนที่ Leaflet ---
   private initMap(): void {
     this.map = L.map(this.mapEl().nativeElement).setView(MSU_CENTER, 14);
 
@@ -99,7 +94,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(this.map);
 
-    // รัศมีให้บริการ 3 กม.
     L.circle(MSU_CENTER, {
       radius: 3000,
       color: '#d88f16',
@@ -126,14 +120,11 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.resizeObserver.observe(this.mapEl().nativeElement);
   }
 
-  // --- 2. Action Handlers ---
   async onCalculateRoutes(): Promise<void> {
     await this.executeRouting(0);
   }
 
   async onRecalculateRoutes(): Promise<void> {
-    // สลับอัลกอริทึมวนไปเรื่อยๆ 0 -> 1 -> 2 -> 0
-    // ส่ง index ถัดไปเป็นพารามิเตอร์ และจะอัปเดต currentAlgoIndex ก็ต่อเมื่อคำนวณสำเร็จเท่านั้น
     await this.executeRouting((this.currentAlgoIndex + 1) % this.algoNames.length);
   }
 
@@ -191,25 +182,25 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-  // --- 3. Backend route calculation ---
   private async executeRouting(algoIndex: number = this.currentAlgoIndex): Promise<void> {
     if (this.isLoading) return;
 
     this.isLoading = true;
 
     try {
-      // ส่ง algorithmIndex (0, 1, 2) ไปให้ Backend คำนวณ
       const result = await lastValueFrom(
         this.http.post<RouteCalculationResponse>(`${API_BASE_URL}/job-sheets/calculate`, {
           algorithmIndex: algoIndex
         })
       );
 
-      // คำนวณสำเร็จแล้ว จึงค่อยยืนยันลำดับอัลกอริทึมปัจจุบัน
       this.currentAlgoIndex = algoIndex;
       this.excludedOrdersCount = result.excludedOutOfRangeCount ?? 0;
       this.invalidCoordCount = result.invalidCoordCount ?? 0;
       this.distanceSource = result.distanceSource ?? 'none';
+      if (result.ordersSignature) {
+        this.ordersSignature = result.ordersSignature;
+      }
 
       if (result.jobSheets.length === 0) {
         this.jobSheets = [];
@@ -244,7 +235,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-  // --- 4. วาดเส้นตามถนนจริง OSRM (ขนานเกาะแนวถนน ไม่หลุดเลน) ---
   private async renderRoutesOnMap(): Promise<void> {
     if (!this.map) return;
 
@@ -253,7 +243,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     const totalRoutes = this.jobSheets.length;
 
     for (let jobIdx = 0; jobIdx < totalRoutes; jobIdx++) {
-      const job = this.jobSheets[jobIdx];
+      const job = this.jobSheets[jobIdx]!;
       const routeColor = job.rider?.route_color || '#3a7bd5';
       const waypoints: L.LatLngTuple[] = [MSU_CENTER];
 
@@ -356,7 +346,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     return Array.from(uniqueRiders.values());
   }
 
-  // --- 5. ระบบจัดการ Cache & ตรวจสอบออเดอร์เปลี่ยนแปลงอัตโนมัติ ---
   private getOrdersSignature(orders: Order[]): string {
     return orders
       .map(o => `${o.order_id}:${o.qty}:${o.customer?.latitude}:${o.customer?.longitude}`)
@@ -366,8 +355,11 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
 
   private saveCachedRoutes(ordersSignature?: string): void {
     try {
+      if (ordersSignature !== undefined) {
+        this.ordersSignature = ordersSignature;
+      }
       const allOrders = this.jobSheets.flatMap(js => js.stops.map(s => s.order!).filter(Boolean));
-      const signature = ordersSignature ?? this.getOrdersSignature(allOrders);
+      const signature = this.ordersSignature || this.getOrdersSignature(allOrders);
 
       const cache = {
         jobSheets: this.jobSheets,
@@ -439,6 +431,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       this.excludedOrdersCount = data.excludedOrdersCount ?? 0;
       this.invalidCoordCount = data.invalidCoordCount ?? 0;
       this.distanceSource = data.distanceSource ?? 'none';
+      this.ordersSignature = data.ordersSignature ?? '';
 
       if (this.isCalculated) {
         await this.renderRoutesOnMap();
@@ -448,34 +441,28 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     }
   }
 
-  /**
-   * กรองจุดพิกัดที่อยู่ชิดกันเกินไปออก เพื่อป้องกันเส้นหักมุมเป็นฟันปลาเวลาขยับขนาน
-   */
   private simplifyCoords(coords: L.LatLngTuple[], minDist = 0.00012): L.LatLngTuple[] {
     if (coords.length <= 2) return coords;
-    const result: L.LatLngTuple[] = [coords[0]];
+    const result: L.LatLngTuple[] = [coords[0]!];
 
     for (let i = 1; i < coords.length - 1; i++) {
-      const last = result[result.length - 1];
-      const dLat = coords[i][0] - last[0];
-      const dLng = coords[i][1] - last[1];
+      const last = result[result.length - 1]!;
+      const cur = coords[i]!;
+      const dLat = cur[0] - last[0];
+      const dLng = cur[1] - last[1];
       if (Math.sqrt(dLat * dLat + dLng * dLng) >= minDist) {
-        result.push(coords[i]);
+        result.push(cur);
       }
     }
 
-    result.push(coords[coords.length - 1]);
+    result.push(coords[coords.length - 1]!);
     return result;
   }
 
-  /**
-   * ขยับพิกัดเส้นทางให้ตีคู่ขนานกันภายในกรอบถนน ไม่บานออกนอกถนน
-   */
   private offsetRoadCoords(coords: L.LatLngTuple[], routeIndex: number, totalRoutes: number): L.LatLngTuple[] {
     if (totalRoutes <= 1 || coords.length < 2) return coords;
 
     const cleanCoords = this.simplifyCoords(coords);
-
     const MAX_TOTAL_SPREAD = 0.00008;
     const step = Math.min(0.000016, MAX_TOTAL_SPREAD / Math.max(1, totalRoutes - 1));
     const shift = (routeIndex - (totalRoutes - 1) / 2) * step;
@@ -487,8 +474,8 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
         return pt;
       }
 
-      const prev = cleanCoords[i - 1];
-      const next = cleanCoords[i + 1];
+      const prev = cleanCoords[i - 1]!;
+      const next = cleanCoords[i + 1]!;
 
       const v1Lat = pt[0] - prev[0];
       const v1Lng = pt[1] - prev[1];
@@ -522,7 +509,6 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     });
   }
 
-  // --- 6. Backend HTTP Calls ---
   private async loadOrders(): Promise<Order[]> {
     const ordersData = await lastValueFrom(
       this.http.get<any[]>(`${API_BASE_URL}/orders`)
