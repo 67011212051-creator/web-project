@@ -15,7 +15,8 @@ import { environment } from '../../../environments/environment';
 // พิกัดร้านค้าศูนย์กลาง (ตรงกับหน้า Customers)
 const MSU_CENTER: L.LatLngTuple = [16.2466557, 103.2517639];
 const API_BASE_URL = environment.apiUrl;
-const ROUTE_CACHE_KEY = 'route-planning-cache';
+// v2: ลำดับอัลกอริทึมเปลี่ยน (เหลือ 3 แบบ) จึงทิ้ง cache เก่าที่ index ไม่ตรงกัน
+const ROUTE_CACHE_KEY = 'route-planning-cache-v2';
 
 const EMPTY_SUMMARY: RouteSummary = {
   totalOrders: 0,
@@ -54,10 +55,9 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   // เก็บลำดับอัลกอริทึมปัจจุบัน (0, 1, 2) สำหรับสลับเมื่อกดปุ่มคำนวณใหม่
   currentAlgoIndex = 0;
   readonly algoNames = [
-    'รูปแบบที่ 1: Nearest Neighbor (เลือกถนนจริงที่ใกล้จุดปัจจุบันที่สุด)',
-    'รูปแบบที่ 2: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)',
-    'รูปแบบที่ 3: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)',
-    'รูปแบบที่ 4: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)'
+    'รูปแบบที่ 1: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)',
+    'รูปแบบที่ 2: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)',
+    'รูปแบบที่ 3: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)'
   ];
   currentAlgoName = this.algoNames[0];
   excludedOrdersCount = 0;
@@ -132,7 +132,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   async onRecalculateRoutes(): Promise<void> {
-    // สลับอัลกอริทึมวนไปเรื่อยๆ 0 -> 1 -> 2 -> 3 -> 0
+    // สลับอัลกอริทึมวนไปเรื่อยๆ 0 -> 1 -> 2 -> 0
     // ส่ง index ถัดไปเป็นพารามิเตอร์ และจะอัปเดต currentAlgoIndex ก็ต่อเมื่อคำนวณสำเร็จเท่านั้น
     await this.executeRouting((this.currentAlgoIndex + 1) % this.algoNames.length);
   }
@@ -198,7 +198,7 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
     this.isLoading = true;
 
     try {
-      // ส่ง algorithmIndex (0, 1, 2, 3) ไปให้ Backend คำนวณ
+      // ส่ง algorithmIndex (0, 1, 2) ไปให้ Backend คำนวณ
       const result = await lastValueFrom(
         this.http.post<RouteCalculationResponse>(`${API_BASE_URL}/job-sheets/calculate`, {
           algorithmIndex: algoIndex
@@ -431,7 +431,10 @@ export class RoutePlanningComponent implements OnInit, AfterViewInit, OnDestroy 
       this.summary = data.summary;
       this.isCalculated = data.isCalculated ?? false;
       this.isDispatched = data.isDispatched ?? false;
-      this.currentAlgoIndex = data.currentAlgoIndex ?? 0;
+      this.currentAlgoIndex =
+        Number.isInteger(data.currentAlgoIndex) && data.currentAlgoIndex >= 0 && data.currentAlgoIndex < this.algoNames.length
+          ? data.currentAlgoIndex
+          : 0;
       this.currentAlgoName = data.currentAlgoName ?? this.algoNames[this.currentAlgoIndex];
       this.excludedOrdersCount = data.excludedOrdersCount ?? 0;
       this.invalidCoordCount = data.invalidCoordCount ?? 0;

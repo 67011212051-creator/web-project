@@ -20,10 +20,9 @@ const ROUTE_CONFIG = {
 };
 
 const ALGO_NAMES = [
-  "รูปแบบที่ 1: Nearest Neighbor (เลือกถนนจริงที่ใกล้จุดปัจจุบันที่สุด)",
-  "รูปแบบที่ 2: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)",
-  "รูปแบบที่ 3: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)",
-  "รูปแบบที่ 4: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)",
+  "รูปแบบที่ 1: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)",
+  "รูปแบบที่ 2: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)",
+  "รูปแบบที่ 3: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)",
 ];
 const ALGO_COUNT = ALGO_NAMES.length;
 
@@ -178,68 +177,6 @@ function getOrdersSignature(orders: RouteOrder[]): string {
     )
     .sort()
     .join("|");
-}
-
-/**
- * อัลกอริทึมที่ 1 (index = 0): Nearest Neighbor โดยใช้ระยะทางถนนจริงจาก OSRM Matrix
- */
-function runNearestNeighborRoad(
-  orders: RouteOrder[],
-  roadMatrix: number[][]
-): number[][] {
-  const unassigned = orders.map((_, idx) => idx + 1); // Node 1..N
-  const routes: number[][] = [];
-
-  while (unassigned.length > 0) {
-    let currNode = 0; // 0 = ร้านค้า
-    let currTime = 0;
-    const route: number[] = [];
-
-    while (
-      route.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE &&
-      unassigned.length > 0
-    ) {
-      let bestIdx = -1;
-      let shortestRoadDist = Infinity;
-      let bestTravelTime = 0;
-
-      for (let i = 0; i < unassigned.length; i++) {
-        const candidateNode = unassigned[i]!;
-        const roadDist = roadMatrix[currNode]![candidateNode]!;
-        const tTime = (roadDist / ROUTE_CONFIG.SPEED_KMH) * 60;
-
-        if (
-          currTime + tTime + ROUTE_CONFIG.TIME_PER_STOP_MIN <=
-            ROUTE_CONFIG.MAX_DELIVERY_MIN &&
-          roadDist < shortestRoadDist
-        ) {
-          shortestRoadDist = roadDist;
-          bestIdx = i;
-          bestTravelTime = tTime;
-        }
-      }
-
-      if (bestIdx === -1 && route.length === 0) {
-        bestIdx = 0;
-        const candidateNode = unassigned[0]!;
-        shortestRoadDist = roadMatrix[currNode]![candidateNode]!;
-        bestTravelTime = (shortestRoadDist / ROUTE_CONFIG.SPEED_KMH) * 60;
-      }
-
-      if (bestIdx === -1) break;
-
-      const [pickedNode] = unassigned.splice(bestIdx, 1);
-      if (pickedNode === undefined) break;
-
-      route.push(pickedNode);
-      currTime += bestTravelTime + ROUTE_CONFIG.TIME_PER_STOP_MIN;
-      currNode = pickedNode;
-    }
-
-    if (route.length > 0) routes.push(route);
-  }
-
-  return routes;
 }
 
 /**
@@ -523,13 +460,11 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
   const { matrix: roadMatrix, source: distanceSource } =
     await fetchRoadDistanceMatrix(orders);
 
-  // 2. เลือกรันอัลกอริทึมตามลำดับที่ผู้ใช้กดปุ่ม (0, 1, 2, 3)
+  // 2. เลือกรันอัลกอริทึมตามลำดับที่ผู้ใช้กดปุ่ม (0, 1, 2)
   let routeGroups: number[][] = [];
   if (algoIndex === 0) {
-    routeGroups = runNearestNeighborRoad(orders, roadMatrix);
-  } else if (algoIndex === 1) {
     routeGroups = runSweepRoad(orders, roadMatrix);
-  } else if (algoIndex === 2) {
+  } else if (algoIndex === 1) {
     routeGroups = runClarkeWrightRoad(orders, roadMatrix);
   } else {
     routeGroups = runClarkeWrightLocalSearch(orders, roadMatrix);
