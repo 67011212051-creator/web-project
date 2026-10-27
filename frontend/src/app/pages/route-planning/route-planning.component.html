@@ -43,7 +43,28 @@
     <div>
       <span class="dot"></span> คำนวณสำเร็จ · {{ summary.totalOrders }} ออเดอร์ แบ่งให้ {{ summary.totalRiders }} ไรเดอร์
     </div>
-    <div>คาดว่าส่งครบ {{ summary.estimatedFinishTime }} ✓ ทันเวลา</div>
+    <div [class.late]="summary.onTime === false">
+      คาดว่าส่งครบ {{ summary.estimatedFinishTime }}
+      <span *ngIf="summary.onTime !== false">✓ ทันเวลา</span>
+      <span *ngIf="summary.onTime === false">✗ เกินเวลา 12:30 น.</span>
+    </div>
+  </div>
+
+  <!-- อัลกอริทึมที่ใช้อยู่ -->
+  <div class="algo-bar" *ngIf="isCalculated">
+    <span class="algo-badge">{{ currentAlgoName }}</span>
+    <span class="algo-step">แบบที่ {{ currentAlgoIndex + 1 }} / {{ algoNames.length }} · กด "คำนวณใหม่" เพื่อสลับ</span>
+    <span class="algo-note" *ngIf="distanceSource === 'fallback'">
+      ⚠ ระยะทางเป็นค่าประมาณ (ไม่สามารถเชื่อมต่อ OSRM ได้)
+    </span>
+  </div>
+
+  <!-- ออเดอร์ที่ไม่ถูกนำมาคำนวณ -->
+  <div class="warn-bar" *ngIf="excludedOrdersCount > 0">
+    ⚠ มี {{ excludedOrdersCount }} ออเดอร์อยู่นอกรัศมีให้บริการ 3 กม. จึงไม่ถูกนำมาจัดสายส่ง
+  </div>
+  <div class="warn-bar" *ngIf="invalidCoordCount > 0">
+    ⚠ มี {{ invalidCoordCount }} ออเดอร์ที่ลูกค้ายังไม่มีพิกัด จึงไม่ถูกนำมาจัดสายส่ง
   </div>
 
   <div class="content-grid">
@@ -74,19 +95,19 @@
         <h3>ภาพรวมค่าใช้จ่าย</h3>
         <div class="cost-row">
           <span>รายได้ ({{ summary.totalBoxes }} × ฿65)</span>
-          <span>฿{{ summary.sales }}</span>
+          <span>฿{{ summary.sales | number:'1.0-2' }}</span>
         </div>
         <div class="cost-row">
           <span>ต้นทุนอาหาร ({{ summary.totalBoxes }} × ฿40)</span>
-          <span>- ฿{{ summary.foodCost }}</span>
+          <span>- ฿{{ summary.foodCost | number:'1.0-2' }}</span>
         </div>
         <div class="cost-row">
           <span>ค่าน้ำมัน ({{ summary.totalDistanceKm }} กม.)</span>
-          <span>- ฿{{ summary.deliveryDistanceCost }}</span>
+          <span>- ฿{{ summary.deliveryDistanceCost | number:'1.0-2' }}</span>
         </div>
         <div class="cost-row">
           <span>ค่าไรเดอร์ ({{ summary.totalRiders }} ครั้ง)</span>
-          <span>- ฿{{ summary.riderBaseCost }}</span>
+          <span>- ฿{{ summary.riderBaseCost | number:'1.0-2' }}</span>
         </div>
         <div class="cost-row total">
           <span>กำไรสุทธิ</span>
@@ -110,19 +131,19 @@
             </div>
             <div class="rider-dist">{{ job.distance_km }} กม.</div>
             <div class="rider-detail">
-              {{ job.total_orders }} ออเดอร์ · {{ job.total_boxes }} กล่อง · ไม่เกิน 3 ออเดอร์
+              {{ job.total_orders }} ออเดอร์ · {{ job.total_boxes }} กล่อง · ไม่เกิน {{ job.rider?.max_orders ?? 3 }} ออเดอร์
             </div>
 
             <!-- รหัสใบงาน -->
-            <div class="job-code-detail">
-              <strong>Job Code:</strong>
-              <span>{{ job.job_code }}</span>
+            <div class="job-code-detail" style="margin-top: 6px; font-size: 13px;">
+              <strong>Job Code:</strong> 
+              <span style="font-family: monospace; color: #2563eb;">{{ job.job_code }}</span>
             </div>
 
             <!-- รหัสออเดอร์ที่อยู่ในใบงานนี้ -->
-            <div class="order-code-detail">
-              <strong>รหัสออเดอร์:</strong>
-              <span>{{ getOrderIds(job) || '-' }}</span>
+            <div class="order-code-detail" style="font-size: 13px;">
+              <strong>รหัสออเดอร์:</strong> 
+              <span style="color: #10b981; font-weight: 600;">#{{ getOrderIds(job) || '-' }}</span>
             </div>
           </div>
         </ng-container>

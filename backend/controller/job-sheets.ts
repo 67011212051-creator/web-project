@@ -1,6 +1,6 @@
 import express from "express";
 import { dbconnect, execute, queryRows } from "../dbconnect";
-import type { RowDataPacket } from "mysql2/promise";
+import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
 export const router = express.Router();
 
@@ -44,10 +44,9 @@ const ROUTE_CONFIG = {
 };
 
 const ALGO_NAMES = [
-  "รูปแบบที่ 1: Nearest Neighbor (เลือกถนนจริงที่ใกล้จุดปัจจุบันที่สุด)",
-  "รูปแบบที่ 2: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)",
-  "รูปแบบที่ 3: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)",
-  "รูปแบบที่ 4: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)",
+  "รูปแบบที่ 1: Sweep Algorithm (แบ่งโซนตามทิศทางรอบร้าน + ถนนจริง)",
+  "รูปแบบที่ 2: Clarke-Wright Savings (จับคู่จุดส่งที่ประหยัดระยะถนนสูงสุด)",
+  "รูปแบบที่ 3: Clarke-Wright + Local Search (ปรับสายส่งให้ต้นทุนต่ำสุด)",
 ];
 const ALGO_COUNT = ALGO_NAMES.length;
 
@@ -118,9 +117,6 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
 /**
  * เงื่อนไขข้อ 2: ดึงตารางระยะทางตามถนนจริง (Road Distance Matrix) จาก OSRM Table API
  * Index 0 = ร้านค้า (MSU_CENTER), Index 1..N = ลูกค้าแต่ละคนตามลำดับใน orders
- * - มี timeout, ตรวจสถานะ HTTP / code ของ OSRM
- * - cell ที่ OSRM ตอบ null จะใช้ค่าประมาณ (Haversine x 1.3) เฉพาะ cell นั้น ไม่ใช้ Infinity
- * - ถ้าล้มเหลวทั้งหมดจะ Fallback เป็นค่าประมาณทั้งตาราง และบอก source กลับไป
  */
 async function fetchRoadDistanceMatrix(
   orders: RouteOrder[]
@@ -137,7 +133,6 @@ async function fetchRoadDistanceMatrix(
       coords.map((to) => haversine(from[0], from[1], to[0], to[1]) * 1.3)
     );
 
-  // OSRM public server จำกัดจำนวนพิกัดต่อ request (~100)
   if (coords.length > OSRM_MAX_COORDS) {
     console.warn(
       `OSRM table limit exceeded (${coords.length} > ${OSRM_MAX_COORDS}), using estimated road factor`
@@ -205,69 +200,7 @@ function getOrdersSignature(orders: RouteOrder[]): string {
 }
 
 /**
- * อัลกอริทึมที่ 1 (index = 0): Nearest Neighbor โดยใช้ระยะทางถนนจริงจาก OSRM Matrix
- */
-function runNearestNeighborRoad(
-  orders: RouteOrder[],
-  roadMatrix: number[][]
-): number[][] {
-  const unassigned = orders.map((_, idx) => idx + 1); // Node 1..N
-  const routes: number[][] = [];
-
-  while (unassigned.length > 0) {
-    let currNode = 0; // 0 = ร้านค้า
-    let currTime = 0;
-    const route: number[] = [];
-
-    while (
-      route.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE &&
-      unassigned.length > 0
-    ) {
-      let bestIdx = -1;
-      let shortestRoadDist = Infinity;
-      let bestTravelTime = 0;
-
-      for (let i = 0; i < unassigned.length; i++) {
-        const candidateNode = unassigned[i]!;
-        const roadDist = roadMatrix[currNode]![candidateNode]!;
-        const tTime = (roadDist / ROUTE_CONFIG.SPEED_KMH) * 60;
-
-        if (
-          currTime + tTime + ROUTE_CONFIG.TIME_PER_STOP_MIN <=
-            ROUTE_CONFIG.MAX_DELIVERY_MIN &&
-          roadDist < shortestRoadDist
-        ) {
-          shortestRoadDist = roadDist;
-          bestIdx = i;
-          bestTravelTime = tTime;
-        }
-      }
-
-      if (bestIdx === -1 && route.length === 0) {
-        bestIdx = 0;
-        const candidateNode = unassigned[0]!;
-        shortestRoadDist = roadMatrix[currNode]![candidateNode]!;
-        bestTravelTime = (shortestRoadDist / ROUTE_CONFIG.SPEED_KMH) * 60;
-      }
-
-      if (bestIdx === -1) break;
-
-      const [pickedNode] = unassigned.splice(bestIdx, 1);
-      if (pickedNode === undefined) break;
-
-      route.push(pickedNode);
-      currTime += bestTravelTime + ROUTE_CONFIG.TIME_PER_STOP_MIN;
-      currNode = pickedNode;
-    }
-
-    if (route.length > 0) routes.push(route);
-  }
-
-  return routes;
-}
-
-/**
- * อัลกอริทึมที่ 2 (index = 1): Sweep Algorithm (แบ่งโซนตามมุมทิศทางรอบร้าน + เรียงจุดในโซนด้วยระยะถนนจริง)
+ * อัลกอริทึมที่ 1 (index = 0): Sweep Algorithm (แบ่งโซนตามมุมทิศทางรอบร้าน + เรียงจุดในโซนด้วยระยะถนนจริง)
  */
 function runSweepRoad(
   orders: RouteOrder[],
@@ -350,7 +283,7 @@ function runSweepRoad(
 }
 
 /**
- * อัลกอริทึมที่ 3 (index = 2): Clarke-Wright Savings Algorithm โดยใช้ระยะทางถนนจริง
+ * อัลกอริทึมที่ 2 (index = 1): Clarke-Wright Savings Algorithm โดยใช้ระยะทางถนนจริง
  */
 function runClarkeWrightRoad(
   orders: RouteOrder[],
@@ -405,12 +338,7 @@ function runClarkeWrightRoad(
 }
 
 /**
- * อัลกอริทึมที่ 4 (index = 3): Clarke-Wright + Local Search
- * เริ่มจากผลของ Clarke-Wright แล้วปรับปรุงด้วย
- *  1) ลองทุกลำดับจุดภายในสาย (สายละไม่เกิน 3 จุด = 6 แบบ ได้ลำดับที่ดีที่สุดแน่นอน)
- *  2) ย้ายจุดข้ามสาย (relocate) และสลับจุดข้ามสาย (swap)
- * โดยใช้ "ต้นทุนส่งจริง" เป็นเป้าหมาย: ค่าเรียกไรเดอร์ + ระยะทาง x กล่อง x อัตราน้ำมัน
- * และไม่ยอมรับการเปลี่ยนที่ทำให้สายใดเกินเวลา MAX_DELIVERY_MIN
+ * อัลกอริทึมที่ 3 (index = 2): Clarke-Wright + Local Search
  */
 function runClarkeWrightLocalSearch(
   orders: RouteOrder[],
@@ -451,7 +379,6 @@ function runClarkeWrightLocalSearch(
           ])
         );
 
-  // ลำดับจุดที่ระยะสั้นที่สุดภายในสาย (จำนวนกล่องในสายคงที่ จึงเทียบด้วยระยะทางได้)
   const bestOrder = (route: number[]): number[] => {
     if (route.length <= 1) return route;
     let best = route;
@@ -547,13 +474,11 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
   const { matrix: roadMatrix, source: distanceSource } =
     await fetchRoadDistanceMatrix(orders);
 
-  // 2. เลือกรันอัลกอริทึมตามลำดับที่ผู้ใช้กดปุ่ม (0, 1, 2, 3)
+  // 2. เลือกรันอัลกอริทึมตามลำดับที่ผู้ใช้กดปุ่ม (0, 1, 2)
   let routeGroups: number[][] = [];
   if (algoIndex === 0) {
-    routeGroups = runNearestNeighborRoad(orders, roadMatrix);
-  } else if (algoIndex === 1) {
     routeGroups = runSweepRoad(orders, roadMatrix);
-  } else if (algoIndex === 2) {
+  } else if (algoIndex === 1) {
     routeGroups = runClarkeWrightRoad(orders, roadMatrix);
   } else {
     routeGroups = runClarkeWrightLocalSearch(orders, roadMatrix);
@@ -686,7 +611,7 @@ router.get("/code/:jobCode", async (req, res) => {
 
   const [sheet] = await queryRows(
     "SELECT job_id, job_code, distance_km, duration_min, rider_pay FROM job_sheets WHERE job_code = ? LIMIT 1",
-    [jobCode],
+    [jobCode]
   );
 
   if (!sheet) {
@@ -696,7 +621,7 @@ router.get("/code/:jobCode", async (req, res) => {
 
   const stops = await queryRows(
     "SELECT order_id, stop_seq, distance_km FROM job_stops WHERE job_id = ? ORDER BY stop_seq ASC",
-    [sheet.job_id],
+    [sheet.job_id]
   );
 
   const jobStops = stops ?? [];
@@ -715,16 +640,16 @@ router.get("/code/:jobCode", async (req, res) => {
     const placeholders = orderIds.map(() => "?").join(", ");
     orders = await queryRows<OrderRow>(
       `SELECT order_id, customer_id, qty FROM orders WHERE order_id IN (${placeholders})`,
-      orderIds,
+      orderIds
     );
 
     const customerIds = [...new Set(orders.map((order) => order.customer_id))];
 
     if (customerIds.length > 0) {
-      const placeholders = customerIds.map(() => "?").join(", ");
+      const custPlaceholders = customerIds.map(() => "?").join(", ");
       customers = await queryRows<CustomerRow>(
-        `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${placeholders})`,
-        customerIds,
+        `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${custPlaceholders})`,
+        customerIds
       );
     }
   }
@@ -768,17 +693,21 @@ router.post("/calculate", async (req, res) => {
       Number.isInteger(rawAlgo) && rawAlgo >= 0 ? rawAlgo % ALGO_COUNT : 0;
 
     const orders = await queryRows<OrderRow>(
-      "SELECT order_id, customer_id, delivery_fee, qty FROM orders",
+      "SELECT order_id, customer_id, delivery_fee, qty FROM orders"
     );
     const customerIds = [...new Set(orders.map((order) => order.customer_id))];
     let customerById = new Map<number, MappedCustomer>();
 
     if (customerIds.length > 0) {
       customerById = new Map(
-        (await queryRows<CustomerRow>(
-          `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${customerIds.map(() => "?").join(", ")})`,
-          customerIds,
-        )).map((customer) => [
+        (
+          await queryRows<CustomerRow>(
+            `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${customerIds
+              .map(() => "?")
+              .join(", ")})`,
+            customerIds
+          )
+        ).map((customer) => [
           customer.customer_id,
           {
             ...customer,
@@ -824,7 +753,6 @@ router.post("/calculate", async (req, res) => {
 
     const excludedOutOfRangeCount =
       allValidOrders.length - inRangeOrders.length;
-    // ออเดอร์ที่ลูกค้ายังไม่มีพิกัดที่ใช้งานได้ (ไม่ถูกนำมาคำนวณ)
     const invalidCoordCount = orders.length - allValidOrders.length;
 
     const result = await calculateRoutes(inRangeOrders, algoIndex);
@@ -850,7 +778,7 @@ router.delete("/delete/:id", async (req, res) => {
 
   const data = await queryRows(
     "SELECT order_id FROM job_stops WHERE order_id = ?",
-    [orderId],
+    [orderId]
   );
   await execute("DELETE FROM job_stops WHERE order_id = ?", [orderId]);
   res.json({ message: "Deleted successfully", data });
@@ -893,8 +821,8 @@ router.post("/dispatch", async (req, res) => {
   }
 
   const connection = await dbconnect.getConnection();
-  let riderData: { rider_id: number; rider_code: string }[] = [];
-  let jobSheetData: { job_id: number; job_code: string }[] = [];
+  const riderData: { rider_id: number; rider_code: string }[] = [];
+  const jobSheetData: { job_id: number; job_code: string }[] = [];
   const data: {
     job_id: number;
     order_id: number;
@@ -909,9 +837,9 @@ router.post("/dispatch", async (req, res) => {
     await connection.execute("DELETE FROM riders");
 
     for (const rider of riders) {
-      const [result] = await connection.execute<import("mysql2/promise").ResultSetHeader>(
+      const [result] = await connection.execute<ResultSetHeader>(
         "INSERT INTO riders (rider_code, route_color, max_orders) VALUES (?, ?, ?)",
-        [rider.rider_code, rider.route_color, rider.max_orders ?? 3],
+        [rider.rider_code, rider.route_color, rider.max_orders ?? 3]
       );
       riderData.push({
         rider_id: result.insertId,
@@ -920,18 +848,21 @@ router.post("/dispatch", async (req, res) => {
     }
 
     const riderIdsByCode = new Map(
-      riderData.map((rider) => [rider.rider_code, rider.rider_id]),
+      riderData.map((rider) => [rider.rider_code, rider.rider_id])
     );
     const jobIdsByCode = new Map<string, number>();
+
     for (const jobSheet of jobSheets) {
       const riderId = riderIdsByCode.get(jobSheet.rider.rider_code);
       if (riderId === undefined) {
-        res.status(400).json({ error: "A job sheet references an unknown rider" });
+        res
+          .status(400)
+          .json({ error: "A job sheet references an unknown rider" });
         await connection.rollback();
         return;
       }
 
-      const [result] = await connection.execute<import("mysql2/promise").ResultSetHeader>(
+      const [result] = await connection.execute<ResultSetHeader>(
         "INSERT INTO job_sheets (job_code, rider_id, distance_km, duration_min, rider_pay) VALUES (?, ?, ?, ?, ?)",
         [
           jobSheet.job_code,
@@ -939,9 +870,12 @@ router.post("/dispatch", async (req, res) => {
           jobSheet.distance_km,
           jobSheet.duration_min,
           jobSheet.rider_pay,
-        ],
+        ]
       );
-      const insertedSheet = { job_id: result.insertId, job_code: jobSheet.job_code };
+      const insertedSheet = {
+        job_id: result.insertId,
+        job_code: jobSheet.job_code,
+      };
       jobSheetData.push(insertedSheet);
       jobIdsByCode.set(jobSheet.job_code, result.insertId);
     }
@@ -955,7 +889,7 @@ router.post("/dispatch", async (req, res) => {
       for (const stop of jobSheet.stops) {
         await connection.execute(
           "INSERT INTO job_stops (job_id, order_id, stop_seq, distance_km) VALUES (?, ?, ?, ?)",
-          [jobId, stop.order_id, stop.stop_seq, stop.distance_km],
+          [jobId, stop.order_id, stop.stop_seq, stop.distance_km]
         );
         data.push({
           job_id: jobId,
