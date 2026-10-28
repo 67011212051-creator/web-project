@@ -4,6 +4,18 @@ import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
 export const router = express.Router();
 
+// express 4 ไม่จับ error ของ async handler ให้เอง ใช้ตัวห่อนี้เพื่อตอบ 500 แทนที่ request จะค้าง
+const safe =
+  (fn: (req: express.Request, res: express.Response) => Promise<unknown>) =>
+  (req: express.Request, res: express.Response) => {
+    Promise.resolve(fn(req, res)).catch((err: any) => {
+      console.error("job-sheets route error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: err?.message || "Internal server error" });
+      }
+    });
+  };
+
 type OrderRow = RowDataPacket & {
   order_id: number;
   customer_id: number;
@@ -31,6 +43,10 @@ const MSU_CENTER: [number, number] = [16.2466557, 103.2517639];
 const MAX_SERVICE_RADIUS_KM = 3.0; // เงื่อนไขข้อ 3: รัศมีให้บริการไม่เกิน 3 กม.
 const OSRM_TIMEOUT_MS = 8000;
 const OSRM_MAX_COORDS = 100;
+const EXACT_MAX_ORDERS = 16; // ไม่เกินนี้จะหาคำตอบต้นทุนต่ำสุดแบบแน่นอน (DP)
+const FAST_MODE_MAX_STOPS = 2; // โหมดส่งด่วน: สายละไม่เกิน 2 ออเดอร์
+// นาทีที่ยอมผ่อนเพดานเวลาโหมดส่งด่วน (0 = เร็วสุดเท่าที่เป็นไปได้ ไม่มีวันช้ากว่าโหมดกำไรสูงสุด)
+const FAST_MODE_SLACK_MIN = 0;
 
 const ROUTE_CONFIG = {
   SPEED_KMH: 30,
@@ -112,6 +128,10 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+/**
+ * ดึงตารางระยะทางตามถนนจริงจาก OSRM Table API (Index 0 = ร้านค้า, 1..N = ลูกค้า)
+ * มี timeout, ตรวจ response และใช้ค่าประมาณ (Haversine x 1.3) เมื่อ OSRM ใช้ไม่ได้
+ */
 async function fetchRoadDistanceMatrix(
   orders: RouteOrder[]
 ): Promise<{ matrix: number[][]; source: DistanceSource }> {
@@ -156,6 +176,7 @@ async function fetchRoadDistanceMatrix(
     );
     return { matrix, source: "osrm" };
   } catch (err) {
+    console.warn("OSRM Table API failed, using estimated road factor:", err);
     return { matrix: estimated(), source: "fallback" };
   } finally {
     clearTimeout(timer);
@@ -217,6 +238,7 @@ function getPermutations(arr: number[]): number[][] {
       );
 }
 
+// ลำดับจุดที่ระยะสั้นสุดภายในสาย (ไล่ทุกลำดับ ปลอดภัยเมื่อสายละไม่เกิน ~6 จุด)
 function optimizeStopsOrder(route: number[], roadMatrix: number[][]): number[] {
   if (route.length <= 1) return route;
   let best = route;
@@ -231,70 +253,66 @@ function optimizeStopsOrder(route: number[], roadMatrix: number[][]): number[] {
   return best;
 }
 
-// โหมดที่ 1: กำไรสูงสุด (Max Profit)
-function runMaxProfitRoad(
+// ต้นทุนส่งของสาย: ปัดระยะ 2 ตำแหน่งให้ตรงกับที่ใช้ตอนสร้างใบงานและ summary
+function calcExactRouteCost(
+  route: number[],
+  orders: RouteOrder[],
+  roadMatrix: number[][]
+): number {
+  if (route.length === 0) return 0;
+  let curr = 0;
+  let rawDist = 0;
+  let boxes = 0;
+  for (const node of route) {
+    rawDist += roadMatrix[curr]![node]!;
+    boxes += orders[node - 1]!.qty;
+    curr = node;
+  }
+  const roundedDist = Math.round(rawDist * 100) / 100;
+  return (
+    ROUTE_CONFIG.RIDER_BASE_FEE +
+    roundedDist * boxes * ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX
+  );
+}
+
+function calcTotalSystemCost(
+  routes: number[][],
+  orders: RouteOrder[],
+  roadMatrix: number[][]
+): number {
+  return routes.reduce(
+    (sum, r) => sum + calcExactRouteCost(r, orders, roadMatrix),
+    0
+  );
+}
+
+// ปรับปรุงสายส่งด้วย Local Search (Relocate + Swap + Split) เพื่อบีบต้นทุนบาทให้ต่ำสุด
+function polishRoutesForMinCost(
+  initialRoutes: number[][],
   orders: RouteOrder[],
   roadMatrix: number[][]
 ): number[][] {
-  const n = orders.length;
-  let routes: number[][] = Array.from({ length: n }, (_, i) => [i + 1]);
-
-  const savings: { i: number; j: number; s: number }[] = [];
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (i !== j) {
-        const s = roadMatrix[0]![i]! + roadMatrix[0]![j]! - roadMatrix[i]![j]!;
-        if (Number.isFinite(s)) savings.push({ i, j, s });
-      }
-    }
-  }
-  savings.sort((a, b) => b.s - a.s);
-
-  for (const { i, j } of savings) {
-    const rI = routes.findIndex((r) => r[r.length - 1] === i);
-    const rJ = routes.findIndex((r) => r[0] === j);
-
-    if (rI !== -1 && rJ !== -1 && rI !== rJ) {
-      const merged = optimizeStopsOrder(
-        [...routes[rI]!, ...routes[rJ]!],
-        roadMatrix
-      );
-      if (
-        merged.length <= ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE &&
-        calcRouteDuration(merged, roadMatrix) <= ROUTE_CONFIG.MAX_DELIVERY_MIN
-      ) {
-        routes[rI] = merged;
-        routes.splice(rJ, 1);
-      }
-    }
-  }
-
-  const boxesOf = (node: number) => orders[node - 1]!.qty;
-  const costOf = (route: number[]): number => {
-    if (route.length === 0) return 0;
-    const boxes = route.reduce((sum, node) => sum + boxesOf(node), 0);
-    return (
-      ROUTE_CONFIG.RIDER_BASE_FEE +
-      calcRouteDistance(route, roadMatrix) *
-        boxes *
-        ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX
-    );
-  };
-
-  routes = routes.map((r) => optimizeStopsOrder(r, roadMatrix));
+  let routes = initialRoutes
+    .filter((r) => r.length > 0)
+    .map((r) => optimizeStopsOrder(r, roadMatrix));
 
   let improved = true;
   let guard = 0;
-  while (improved && guard++ < 200) {
+
+  while (improved && guard++ < 250) {
     improved = false;
 
+    // 1. Relocate & Swap ระหว่างสายที่มีอยู่
     for (let a = 0; a < routes.length && !improved; a++) {
       for (let b = 0; b < routes.length && !improved; b++) {
         if (a === b) continue;
         const ra = routes[a]!;
         const rb = routes[b]!;
-        const before = costOf(ra) + costOf(rb);
+        const before =
+          calcExactRouteCost(ra, orders, roadMatrix) +
+          calcExactRouteCost(rb, orders, roadMatrix);
 
+        // Relocate: ย้ายจุด i จากสาย a ไปสาย b
         if (rb.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE) {
           for (let i = 0; i < ra.length && !improved; i++) {
             const newA = optimizeStopsOrder(
@@ -307,7 +325,11 @@ function runMaxProfitRoad(
               ROUTE_CONFIG.MAX_DELIVERY_MIN
             )
               continue;
-            if (costOf(newA) + costOf(newB) < before - 1e-6) {
+
+            const after =
+              calcExactRouteCost(newA, orders, roadMatrix) +
+              calcExactRouteCost(newB, orders, roadMatrix);
+            if (after < before - 1e-6) {
               routes[a] = newA;
               routes[b] = newB;
               improved = true;
@@ -315,6 +337,7 @@ function runMaxProfitRoad(
           }
         }
 
+        // Swap: สลับจุด i ของสาย a กับจุด j ของสาย b
         if (a < b) {
           for (let i = 0; i < ra.length && !improved; i++) {
             for (let j = 0; j < rb.length && !improved; j++) {
@@ -333,12 +356,42 @@ function runMaxProfitRoad(
                   ROUTE_CONFIG.MAX_DELIVERY_MIN
               )
                 continue;
-              if (costOf(newA) + costOf(newB) < before - 1e-6) {
+
+              const after =
+                calcExactRouteCost(newA, orders, roadMatrix) +
+                calcExactRouteCost(newB, orders, roadMatrix);
+              if (after < before - 1e-6) {
                 routes[a] = newA;
                 routes[b] = newB;
                 improved = true;
               }
             }
+          }
+        }
+      }
+    }
+
+    // 2. Split: ทดลองแยกจุดส่งออกจากสายที่แบกกล่องเยอะเกินไป มาเปิดสายเดี่ยวใหม่
+    if (!improved) {
+      for (let a = 0; a < routes.length && !improved; a++) {
+        const ra = routes[a]!;
+        if (ra.length <= 1) continue;
+        const before = calcExactRouteCost(ra, orders, roadMatrix);
+
+        for (let i = 0; i < ra.length && !improved; i++) {
+          const reducedA = optimizeStopsOrder(
+            ra.filter((_, k) => k !== i),
+            roadMatrix
+          );
+          const soloRoute = [ra[i]!];
+          const after =
+            calcExactRouteCost(reducedA, orders, roadMatrix) +
+            calcExactRouteCost(soloRoute, orders, roadMatrix);
+
+          if (after < before - 1e-6) {
+            routes[a] = reducedA;
+            routes.push(soloRoute);
+            improved = true;
           }
         }
       }
@@ -350,154 +403,273 @@ function runMaxProfitRoad(
   return routes;
 }
 
-// โหมดที่ 2: ส่งเร็วที่สุด (Fastest Delivery)
+/**
+ * หาการแบ่งสายที่ "ต้นทุนรวมต่ำสุดจริง" ด้วย DP บน bitmask (ไม่ใช่ heuristic)
+ * - maxStops: จำนวนออเดอร์สูงสุดต่อสาย (1-3)
+ * - maxMinutes: เวลาสูงสุดของสายที่มี 2 ออเดอร์ขึ้นไป
+ *   (สายเดี่ยวอนุญาตเสมอ เพราะทุกออเดอร์ต้องมีคนส่ง)
+ * คืน null เมื่อออเดอร์เกิน EXACT_MAX_ORDERS (ให้ผู้เรียกใช้วิธีประมาณแทน)
+ */
+function solveMinCostPartition(
+  orders: RouteOrder[],
+  roadMatrix: number[][],
+  maxStops: number,
+  maxMinutes: number
+): number[][] | null {
+  const n = orders.length;
+  if (n === 0 || n > EXACT_MAX_ORDERS) return null;
+
+  type Group = { mask: number; route: number[]; cost: number };
+  const groupsByLow: Group[][] = Array.from({ length: n }, () => []);
+
+  const consider = (nodes: number[]) => {
+    const route = optimizeStopsOrder(nodes, roadMatrix);
+    if (
+      route.length > 1 &&
+      calcRouteDuration(route, roadMatrix) > maxMinutes + 1e-6
+    ) {
+      return;
+    }
+    let mask = 0;
+    for (const x of nodes) mask |= 1 << (x - 1);
+    groupsByLow[Math.min(...nodes) - 1]!.push({
+      mask,
+      route,
+      cost: calcExactRouteCost(route, orders, roadMatrix),
+    });
+  };
+
+  for (let i = 1; i <= n; i++) {
+    consider([i]);
+    if (maxStops < 2) continue;
+    for (let j = i + 1; j <= n; j++) {
+      consider([i, j]);
+      if (maxStops < 3) continue;
+      for (let k = j + 1; k <= n; k++) consider([i, j, k]);
+    }
+  }
+
+  const full = (1 << n) - 1;
+  const dp = new Float64Array(full + 1).fill(Infinity);
+  const pick: (Group | null)[] = new Array(full + 1).fill(null);
+  dp[0] = 0;
+
+  for (let mask = 0; mask < full; mask++) {
+    if (!Number.isFinite(dp[mask]!)) continue;
+    let low = 0;
+    while (mask & (1 << low)) low++;
+    for (const g of groupsByLow[low]!) {
+      if (g.mask & mask) continue;
+      const nm = mask | g.mask;
+      const c = dp[mask]! + g.cost;
+      if (c < dp[nm]!) {
+        dp[nm] = c;
+        pick[nm] = g;
+      }
+    }
+  }
+
+  if (!Number.isFinite(dp[full]!)) return null;
+
+  const routes: number[][] = [];
+  for (let m = full; m; ) {
+    const g = pick[m]!;
+    routes.push(g.route);
+    m ^= g.mask;
+  }
+  // เรียงให้ผลคงที่: สายที่มีออเดอร์เลขน้อยสุดมาก่อน
+  routes.sort((a, b) => Math.min(...a) - Math.min(...b));
+  return routes;
+}
+
+// โหมดกำไรสูงสุด: หาต้นทุนต่ำสุดจริง (สายละไม่เกิน 3 ออเดอร์, ไม่เกิน 60 นาที)
+function solveExactMinCost(
+  orders: RouteOrder[],
+  roadMatrix: number[][]
+): number[][] | null {
+  if (ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE !== 3) return null;
+  return solveMinCostPartition(
+    orders,
+    roadMatrix,
+    3,
+    ROUTE_CONFIG.MAX_DELIVERY_MIN
+  );
+}
+
+/**
+ * โหมดที่ 2: ส่งด่วน — "เร็วที่สุดก่อน แล้วค่อยประหยัด"
+ * 1) เพดานเวลา T = เวลาของลูกค้าที่ไกลที่สุดเมื่อส่งเดี่ยว (ต่ำสุดที่เป็นไปได้)
+ *    ไม่มีการแบ่งสายแบบใดทำให้ระบบเสร็จเร็วกว่า T
+ * 2) รวมสายได้ (สายละไม่เกิน FAST_MODE_MAX_STOPS) เฉพาะเมื่อสายที่รวมใช้เวลาไม่เกิน T
+ *    และเลือกชุดที่ต้นทุนรวมต่ำสุด
+ *    - ออเดอร์ไม่เกิน EXACT_MAX_ORDERS: หาชุดที่ดีที่สุดจริงด้วย DP
+ *    - มากกว่านั้น: จับคู่แบบ greedy ตามเงินที่ประหยัดได้ (ไม่การันตีต่ำสุด แต่ไม่เกิน T)
+ */
 function runFastestDeliveryRoad(
   orders: RouteOrder[],
   roadMatrix: number[][]
 ): number[][] {
   const n = orders.length;
-  const targetRiders = Math.min(n, Math.max(1, Math.ceil(n / 2)));
+  if (n === 0) return [];
 
-  const sortedByAngle = orders
-    .map((o, idx) => ({
-      node: idx + 1,
-      angle: Math.atan2(
-        o.customer.latitude - MSU_CENTER[0],
-        o.customer.longitude - MSU_CENTER[1]
-      ),
-    }))
-    .sort((a, b) => a.angle - b.angle)
-    .map((item) => item.node);
-
-  const routes: number[][] = [];
-  const assigned = new Set<number>();
-
-  const step = Math.max(1, Math.floor(sortedByAngle.length / targetRiders));
-  for (let i = 0; i < sortedByAngle.length && routes.length < targetRiders; i += step) {
-    const seedNode = sortedByAngle[i]!;
-    routes.push([seedNode]);
-    assigned.add(seedNode);
+  let ceiling = 0;
+  for (let i = 1; i <= n; i++) {
+    ceiling = Math.max(ceiling, calcRouteDuration([i], roadMatrix));
   }
+  const limit = ceiling + FAST_MODE_SLACK_MIN + 1e-6;
 
-  const remaining = sortedByAngle.filter((node) => !assigned.has(node));
+  const exact = solveMinCostPartition(
+    orders,
+    roadMatrix,
+    FAST_MODE_MAX_STOPS,
+    limit
+  );
+  if (exact) return exact;
 
-  while (remaining.length > 0) {
-    let bestRemIdx = -1;
-    let bestRouteIdx = -1;
-    let bestNewDuration = Infinity;
+  // ออเดอร์เยอะ: จับคู่แบบ greedy
+  const pairs: { i: number; j: number; gain: number; route: number[] }[] = [];
+  for (let i = 1; i <= n; i++) {
+    for (let j = i + 1; j <= n; j++) {
+      const route = optimizeStopsOrder([i, j], roadMatrix);
+      if (calcRouteDuration(route, roadMatrix) > limit) continue;
+      const gain =
+        calcExactRouteCost([i], orders, roadMatrix) +
+        calcExactRouteCost([j], orders, roadMatrix) -
+        calcExactRouteCost(route, orders, roadMatrix);
+      if (gain > 1e-6) pairs.push({ i, j, gain, route });
+    }
+  }
+  pairs.sort((a, b) => b.gain - a.gain);
 
-    for (let rIdx = 0; rIdx < routes.length; rIdx++) {
-      const route = routes[rIdx]!;
-      if (route.length >= ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE) continue;
+  const used = new Set<number>();
+  const routes: number[][] = [];
+  for (const p of pairs) {
+    if (used.has(p.i) || used.has(p.j)) continue;
+    used.add(p.i);
+    used.add(p.j);
+    routes.push(p.route);
+  }
+  for (let i = 1; i <= n; i++) {
+    if (!used.has(i)) routes.push([i]);
+  }
+  routes.sort((a, b) => Math.min(...a) - Math.min(...b));
+  return routes;
+}
 
-      for (let i = 0; i < remaining.length; i++) {
-        const candidate = remaining[i]!;
-        const trialRoute = optimizeStopsOrder([...route, candidate], roadMatrix);
-        const newDur = calcRouteDuration(trialRoute, roadMatrix);
+/**
+ * โหมดที่ 1: กำไรสูงสุด (Max Profit)
+ * - ออเดอร์ไม่เกิน EXACT_MAX_ORDERS: หาการแบ่งสายต้นทุนต่ำสุดจริงด้วย DP
+ * - มากกว่านั้น: เปรียบเทียบ heuristic 3 แบบ แล้วเลือกต้นทุนต่ำสุด
+ *   (A: Cost-Based Savings, B: Clarke-Wright, C: ผลของโหมดส่งด่วน แล้ว Polish)
+ *   ทำให้ผลไม่แพ้โหมดส่งเร็วในแง่ต้นทุนส่ง แต่ไม่ใช่การันตีว่าต่ำสุดจริง
+ */
+function runMaxProfitRoad(
+  orders: RouteOrder[],
+  roadMatrix: number[][]
+): number[][] {
+  const exact = solveExactMinCost(orders, roadMatrix);
+  if (exact) return exact;
 
+  const n = orders.length;
+
+  // ทางเลือกที่ 1: Cost-Based Savings (ยุบรวมเฉพาะคู่ที่ทำให้ต้นทุนเงินบาทจริงลดลง)
+  let routesA: number[][] = Array.from({ length: n }, (_, i) => [i + 1]);
+  let mergedAny = true;
+
+  while (mergedAny) {
+    mergedAny = false;
+    let bestGain = 0;
+    let bestPair: [number, number] | null = null;
+    let bestMergedRoute: number[] = [];
+
+    for (let i = 0; i < routesA.length; i++) {
+      for (let j = i + 1; j < routesA.length; j++) {
+        const r1 = routesA[i]!;
+        const r2 = routesA[j]!;
+        if (r1.length + r2.length > ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE) continue;
+
+        const candidate = optimizeStopsOrder([...r1, ...r2], roadMatrix);
         if (
-          newDur <= ROUTE_CONFIG.MAX_DELIVERY_MIN &&
-          newDur < bestNewDuration
-        ) {
-          bestNewDuration = newDur;
-          bestRemIdx = i;
-          bestRouteIdx = rIdx;
+          calcRouteDuration(candidate, roadMatrix) >
+          ROUTE_CONFIG.MAX_DELIVERY_MIN
+        )
+          continue;
+
+        const separateCost =
+          calcExactRouteCost(r1, orders, roadMatrix) +
+          calcExactRouteCost(r2, orders, roadMatrix);
+        const mergedCost = calcExactRouteCost(candidate, orders, roadMatrix);
+        const costSaved = separateCost - mergedCost;
+
+        if (costSaved > bestGain + 1e-6) {
+          bestGain = costSaved;
+          bestPair = [i, j];
+          bestMergedRoute = candidate;
         }
       }
     }
 
-    if (bestRemIdx !== -1 && bestRouteIdx !== -1) {
-      const [picked] = remaining.splice(bestRemIdx, 1);
-      routes[bestRouteIdx] = optimizeStopsOrder(
-        [...routes[bestRouteIdx]!, picked!],
+    if (bestPair) {
+      const [i, j] = bestPair;
+      routesA[i] = bestMergedRoute;
+      routesA.splice(j, 1);
+      mergedAny = true;
+    }
+  }
+  routesA = polishRoutesForMinCost(routesA, orders, roadMatrix);
+
+  // ทางเลือกที่ 2: Distance Clarke-Wright + Cost Polish
+  let routesB: number[][] = Array.from({ length: n }, (_, i) => [i + 1]);
+  const savings: { i: number; j: number; s: number }[] = [];
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (i !== j) {
+        const s = roadMatrix[0]![i]! + roadMatrix[0]![j]! - roadMatrix[i]![j]!;
+        if (Number.isFinite(s)) savings.push({ i, j, s });
+      }
+    }
+  }
+  savings.sort((a, b) => b.s - a.s);
+
+  for (const { i, j } of savings) {
+    const rI = routesB.findIndex((r) => r[r.length - 1] === i);
+    const rJ = routesB.findIndex((r) => r[0] === j);
+    if (rI !== -1 && rJ !== -1 && rI !== rJ) {
+      const merged = optimizeStopsOrder(
+        [...routesB[rI]!, ...routesB[rJ]!],
         roadMatrix
       );
-    } else {
-      const [picked] = remaining.splice(0, 1);
-      if (picked !== undefined) routes.push([picked]);
-    }
-  }
-
-  let improved = true;
-  let guard = 0;
-  while (improved && guard++ < 200) {
-    improved = false;
-
-    for (let a = 0; a < routes.length && !improved; a++) {
-      for (let b = 0; b < routes.length && !improved; b++) {
-        if (a === b) continue;
-        const ra = routes[a]!;
-        const rb = routes[b]!;
-        const durA = calcRouteDuration(ra, roadMatrix);
-        const durB = calcRouteDuration(rb, roadMatrix);
-        const prevMax = Math.max(durA, durB);
-        const prevSum = durA + durB;
-
-        if (rb.length < ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE && ra.length > 1) {
-          for (let i = 0; i < ra.length && !improved; i++) {
-            const newA = optimizeStopsOrder(
-              ra.filter((_, k) => k !== i),
-              roadMatrix
-            );
-            const newB = optimizeStopsOrder([...rb, ra[i]!], roadMatrix);
-            const newDurA = calcRouteDuration(newA, roadMatrix);
-            const newDurB = calcRouteDuration(newB, roadMatrix);
-
-            if (newDurB > ROUTE_CONFIG.MAX_DELIVERY_MIN) continue;
-
-            const newMax = Math.max(newDurA, newDurB);
-            const newSum = newDurA + newDurB;
-
-            if (
-              newMax < prevMax - 1e-6 ||
-              (Math.abs(newMax - prevMax) <= 1e-6 && newSum < prevSum - 1e-6)
-            ) {
-              routes[a] = newA;
-              routes[b] = newB;
-              improved = true;
-            }
-          }
-        }
-
-        if (a < b) {
-          for (let i = 0; i < ra.length && !improved; i++) {
-            for (let j = 0; j < rb.length && !improved; j++) {
-              const newA = optimizeStopsOrder(
-                ra.map((node, k) => (k === i ? rb[j]! : node)),
-                roadMatrix
-              );
-              const newB = optimizeStopsOrder(
-                rb.map((node, k) => (k === j ? ra[i]! : node)),
-                roadMatrix
-              );
-              const newDurA = calcRouteDuration(newA, roadMatrix);
-              const newDurB = calcRouteDuration(newB, roadMatrix);
-
-              if (
-                newDurA > ROUTE_CONFIG.MAX_DELIVERY_MIN ||
-                newDurB > ROUTE_CONFIG.MAX_DELIVERY_MIN
-              )
-                continue;
-
-              const newMax = Math.max(newDurA, newDurB);
-              const newSum = newDurA + newDurB;
-
-              if (
-                newMax < prevMax - 1e-6 ||
-                (Math.abs(newMax - prevMax) <= 1e-6 && newSum < prevSum - 1e-6)
-              ) {
-                routes[a] = newA;
-                routes[b] = newB;
-                improved = true;
-              }
-            }
-          }
-        }
+      if (
+        merged.length <= ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE &&
+        calcRouteDuration(merged, roadMatrix) <= ROUTE_CONFIG.MAX_DELIVERY_MIN
+      ) {
+        routesB[rI] = merged;
+        routesB.splice(rJ, 1);
       }
     }
   }
+  routesB = polishRoutesForMinCost(routesB, orders, roadMatrix);
 
-  return routes.filter((r) => r.length > 0);
+  // ทางเลือกที่ 3: ผลของโหมดส่งด่วน แล้ว Polish ลดต้นทุน
+  const routesC = polishRoutesForMinCost(
+    runFastestDeliveryRoad(orders, roadMatrix),
+    orders,
+    roadMatrix
+  );
+
+  const candidates = [routesA, routesB, routesC];
+  let bestRoutes = routesA;
+  let minCost = calcTotalSystemCost(routesA, orders, roadMatrix);
+
+  for (const cand of candidates) {
+    const cost = calcTotalSystemCost(cand, orders, roadMatrix);
+    if (cost < minCost - 1e-6) {
+      minCost = cost;
+      bestRoutes = cand;
+    }
+  }
+
+  return bestRoutes;
 }
 
 async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
@@ -564,12 +736,16 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
         rider_id: riderIndex + 1,
         rider_code: `RD${String(riderIndex + 1).padStart(2, "0")}`,
         route_color: routeColor(riderIndex),
-        max_orders: ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE,
+        max_orders:
+          algoIndex === 1
+            ? FAST_MODE_MAX_STOPS
+            : ROUTE_CONFIG.MAX_ORDERS_PER_ROUTE,
       };
 
+      const roundedRouteDist = Math.round(currentDistance * 100) / 100;
       const deliveryCost =
         ROUTE_CONFIG.RIDER_BASE_FEE +
-        currentDistance * currentBoxes * ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX;
+        roundedRouteDist * currentBoxes * ROUTE_CONFIG.FUEL_RATE_PER_KM_BOX;
       const sales = currentBoxes * ROUTE_CONFIG.PRICE_PER_BOX;
       const foodCost = currentBoxes * ROUTE_CONFIG.FOOD_COST_PER_BOX;
       const netProfit = sales - foodCost - deliveryCost;
@@ -584,7 +760,7 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
         job_code: jobCode,
         rider_id: rider.rider_id,
         rider,
-        distance_km: Math.round(currentDistance * 100) / 100,
+        distance_km: roundedRouteDist,
         duration_min: Math.round(currentTime),
         rider_pay: Math.round(deliveryCost * 100) / 100,
         total_boxes: currentBoxes,
@@ -644,92 +820,95 @@ async function calculateRoutes(orders: RouteOrder[], algoIndex: number) {
   };
 }
 
-router.get("/code/:jobCode", async (req, res) => {
-  const jobCode = String(req.params.jobCode ?? "")
-    .trim()
-    .toUpperCase();
+router.get(
+  "/code/:jobCode",
+  safe(async (req, res) => {
+    const jobCode = String(req.params.jobCode ?? "")
+      .trim()
+      .toUpperCase();
 
-  if (!/^[A-Z0-9-]{3,30}$/.test(jobCode)) {
-    res.status(400).json({ error: "Invalid job code" });
-    return;
-  }
+    if (!/^[A-Z0-9-]{3,30}$/.test(jobCode)) {
+      res.status(400).json({ error: "Invalid job code" });
+      return;
+    }
 
-  const [sheet] = await queryRows(
-    "SELECT job_id, job_code, distance_km, duration_min, rider_pay FROM job_sheets WHERE job_code = ? LIMIT 1",
-    [jobCode]
-  );
-
-  if (!sheet) {
-    res.status(404).json({ error: "Job sheet not found" });
-    return;
-  }
-
-  const stops = await queryRows(
-    "SELECT order_id, stop_seq, distance_km FROM job_stops WHERE job_id = ? ORDER BY stop_seq ASC",
-    [sheet.job_id]
-  );
-
-  const jobStops = stops ?? [];
-  const orderIds = jobStops.map((stop) => stop.order_id);
-
-  let orders: { order_id: number; customer_id: number; qty: number }[] = [];
-  let customers: {
-    customer_id: number;
-    name: string;
-    phone: string;
-    latitude: number | string;
-    longitude: number | string;
-  }[] = [];
-
-  if (orderIds.length > 0) {
-    const placeholders = orderIds.map(() => "?").join(", ");
-    orders = await queryRows<OrderRow>(
-      `SELECT order_id, customer_id, qty FROM orders WHERE order_id IN (${placeholders})`,
-      orderIds
+    const [sheet] = await queryRows(
+      "SELECT job_id, job_code, distance_km, duration_min, rider_pay FROM job_sheets WHERE job_code = ? LIMIT 1",
+      [jobCode]
     );
 
-    const customerIds = [...new Set(orders.map((order) => order.customer_id))];
-
-    if (customerIds.length > 0) {
-      const custPlaceholders = customerIds.map(() => "?").join(", ");
-      customers = await queryRows<CustomerRow>(
-        `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${custPlaceholders})`,
-        customerIds
-      );
+    if (!sheet) {
+      res.status(404).json({ error: "Job sheet not found" });
+      return;
     }
-  }
 
-  const orderById = new Map(orders.map((order) => [order.order_id, order]));
-  const customerById = new Map(
-    customers.map((customer) => [customer.customer_id, customer])
-  );
+    const stops = await queryRows(
+      "SELECT order_id, stop_seq, distance_km FROM job_stops WHERE job_id = ? ORDER BY stop_seq ASC",
+      [sheet.job_id]
+    );
 
-  const resultStops = jobStops.map((stop) => {
-    const order = orderById.get(stop.order_id);
-    const customer = order ? customerById.get(order.customer_id) : undefined;
+    const jobStops = stops ?? [];
+    const orderIds = jobStops.map((stop) => stop.order_id);
 
-    return {
-      stop_seq: stop.stop_seq,
-      order_id: stop.order_id,
-      distance_km: Number(stop.distance_km),
-      qty: order?.qty ?? 0,
-      customer_name: customer?.name ?? "-",
-      phone: customer?.phone ?? "-",
-      latitude: Number(customer?.latitude),
-      longitude: Number(customer?.longitude),
-    };
-  });
+    let orders: { order_id: number; customer_id: number; qty: number }[] = [];
+    let customers: {
+      customer_id: number;
+      name: string;
+      phone: string;
+      latitude: number | string;
+      longitude: number | string;
+    }[] = [];
 
-  res.json({
-    job_code: sheet.job_code,
-    distance_km: Number(sheet.distance_km),
-    duration_min: Number(sheet.duration_min),
-    rider_pay: Number(sheet.rider_pay),
-    total_boxes: resultStops.reduce((sum, stop) => sum + stop.qty, 0),
-    total_orders: resultStops.length,
-    stops: resultStops,
-  });
-});
+    if (orderIds.length > 0) {
+      const placeholders = orderIds.map(() => "?").join(", ");
+      orders = await queryRows<OrderRow>(
+        `SELECT order_id, customer_id, qty FROM orders WHERE order_id IN (${placeholders})`,
+        orderIds
+      );
+
+      const customerIds = [...new Set(orders.map((order) => order.customer_id))];
+
+      if (customerIds.length > 0) {
+        const custPlaceholders = customerIds.map(() => "?").join(", ");
+        customers = await queryRows<CustomerRow>(
+          `SELECT customer_id, name, phone, latitude, longitude FROM customers WHERE customer_id IN (${custPlaceholders})`,
+          customerIds
+        );
+      }
+    }
+
+    const orderById = new Map(orders.map((order) => [order.order_id, order]));
+    const customerById = new Map(
+      customers.map((customer) => [customer.customer_id, customer])
+    );
+
+    const resultStops = jobStops.map((stop) => {
+      const order = orderById.get(stop.order_id);
+      const customer = order ? customerById.get(order.customer_id) : undefined;
+
+      return {
+        stop_seq: stop.stop_seq,
+        order_id: stop.order_id,
+        distance_km: Number(stop.distance_km),
+        qty: order?.qty ?? 0,
+        customer_name: customer?.name ?? "-",
+        phone: customer?.phone ?? "-",
+        latitude: Number(customer?.latitude),
+        longitude: Number(customer?.longitude),
+      };
+    });
+
+    res.json({
+      job_code: sheet.job_code,
+      distance_km: Number(sheet.distance_km),
+      duration_min: Number(sheet.duration_min),
+      rider_pay: Number(sheet.rider_pay),
+      total_boxes: resultStops.reduce((sum, stop) => sum + stop.qty, 0),
+      total_orders: resultStops.length,
+      stops: resultStops,
+    });
+  })
+);
 
 router.post("/calculate", async (req, res) => {
   try {
@@ -785,6 +964,7 @@ router.post("/calculate", async (req, res) => {
       ];
     });
 
+    // เงื่อนไขข้อ 3: กรองเฉพาะลูกค้าที่อยู่ในรัศมี 3 กม. จากร้านค้า
     const inRangeOrders = allValidOrders.filter((order) => {
       const distFromShopKm = haversine(
         MSU_CENTER[0],
@@ -813,146 +993,151 @@ router.post("/calculate", async (req, res) => {
   }
 });
 
-router.delete("/delete/:id", async (req, res) => {
-  const orderId = Number(req.params.id);
-  if (!Number.isInteger(orderId) || orderId <= 0) {
-    res.status(400).json({ error: "Invalid order ID" });
-    return;
-  }
-
-  const data = await queryRows(
-    "SELECT order_id FROM job_stops WHERE order_id = ?",
-    [orderId]
-  );
-  await execute("DELETE FROM job_stops WHERE order_id = ?", [orderId]);
-  res.json({ message: "Deleted successfully", data });
-});
-
-router.post("/dispatch", async (req, res) => {
-  const { jobSheets, riders } = req.body ?? {};
-
-  if (
-    !Array.isArray(jobSheets) ||
-    jobSheets.length === 0 ||
-    !Array.isArray(riders) ||
-    riders.length === 0 ||
-    riders.some(
-      (rider: any) =>
-        !rider ||
-        typeof rider.rider_code !== "string" ||
-        typeof rider.route_color !== "string"
-    )
-  ) {
-    res.status(400).json({ error: "Invalid job sheets or riders data" });
-    return;
-  }
-
-  const riderCodes = new Set(riders.map((rider: any) => rider.rider_code));
-  if (
-    jobSheets.some(
-      (jobSheet: any) =>
-        !jobSheet ||
-        typeof jobSheet.job_code !== "string" ||
-        !jobSheet.rider ||
-        !riderCodes.has(jobSheet.rider.rider_code) ||
-        !Array.isArray(jobSheet.stops)
-    )
-  ) {
-    res
-      .status(400)
-      .json({ error: "Invalid job sheet or unknown rider reference" });
-    return;
-  }
-
-  const connection = await dbconnect.getConnection();
-  const riderData: { rider_id: number; rider_code: string }[] = [];
-  const jobSheetData: { job_id: number; job_code: string }[] = [];
-  const data: {
-    job_id: number;
-    order_id: number;
-    stop_seq: number;
-    distance_km: number;
-  }[] = [];
-
-  try {
-    await connection.beginTransaction();
-    await connection.execute("DELETE FROM job_stops");
-    await connection.execute("DELETE FROM job_sheets");
-    await connection.execute("DELETE FROM riders");
-
-    for (const rider of riders) {
-      const [result] = await connection.execute<ResultSetHeader>(
-        "INSERT INTO riders (rider_code, route_color, max_orders) VALUES (?, ?, ?)",
-        [rider.rider_code, rider.route_color, rider.max_orders ?? 3]
-      );
-      riderData.push({
-        rider_id: result.insertId,
-        rider_code: rider.rider_code,
-      });
+router.delete(
+  "/delete/:id",
+  safe(async (req, res) => {
+    const orderId = Number(req.params.id);
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      res.status(400).json({ error: "Invalid order ID" });
+      return;
     }
 
-    const riderIdsByCode = new Map(
-      riderData.map((rider) => [rider.rider_code, rider.rider_id])
+    const data = await queryRows(
+      "SELECT order_id FROM job_stops WHERE order_id = ?",
+      [orderId]
     );
-    const jobIdsByCode = new Map<string, number>();
+    await execute("DELETE FROM job_stops WHERE order_id = ?", [orderId]);
+    res.json({ message: "Deleted successfully", data });
+  })
+);
 
-    for (const jobSheet of jobSheets) {
-      const riderId = riderIdsByCode.get(jobSheet.rider.rider_code);
-      if (riderId === undefined) {
-        res
-          .status(400)
-          .json({ error: "A job sheet references an unknown rider" });
-        await connection.rollback();
-        return;
-      }
+router.post(
+  "/dispatch",
+  safe(async (req, res) => {
+    const { jobSheets, riders } = req.body ?? {};
 
-      const [result] = await connection.execute<ResultSetHeader>(
-        "INSERT INTO job_sheets (job_code, rider_id, distance_km, duration_min, rider_pay) VALUES (?, ?, ?, ?, ?)",
-        [
-          jobSheet.job_code,
-          riderId,
-          jobSheet.distance_km,
-          jobSheet.duration_min,
-          jobSheet.rider_pay,
-        ]
-      );
-      const insertedSheet = {
-        job_id: result.insertId,
-        job_code: jobSheet.job_code,
-      };
-      jobSheetData.push(insertedSheet);
-      jobIdsByCode.set(jobSheet.job_code, result.insertId);
+    if (
+      !Array.isArray(jobSheets) ||
+      jobSheets.length === 0 ||
+      !Array.isArray(riders) ||
+      riders.length === 0 ||
+      riders.some(
+        (rider: any) =>
+          !rider ||
+          typeof rider.rider_code !== "string" ||
+          typeof rider.route_color !== "string"
+      )
+    ) {
+      res.status(400).json({ error: "Invalid job sheets or riders data" });
+      return;
     }
 
-    for (const jobSheet of jobSheets) {
-      const jobId = jobIdsByCode.get(jobSheet.job_code);
-      if (jobId === undefined) {
-        throw new Error(`Missing inserted job sheet for ${jobSheet.job_code}`);
-      }
+    const riderCodes = new Set(riders.map((rider: any) => rider.rider_code));
+    if (
+      jobSheets.some(
+        (jobSheet: any) =>
+          !jobSheet ||
+          typeof jobSheet.job_code !== "string" ||
+          !jobSheet.rider ||
+          !riderCodes.has(jobSheet.rider.rider_code) ||
+          !Array.isArray(jobSheet.stops)
+      )
+    ) {
+      res
+        .status(400)
+        .json({ error: "Invalid job sheet or unknown rider reference" });
+      return;
+    }
 
-      for (const stop of jobSheet.stops) {
-        await connection.execute(
-          "INSERT INTO job_stops (job_id, order_id, stop_seq, distance_km) VALUES (?, ?, ?, ?)",
-          [jobId, stop.order_id, stop.stop_seq, stop.distance_km]
+    const connection = await dbconnect.getConnection();
+    const riderData: { rider_id: number; rider_code: string }[] = [];
+    const jobSheetData: { job_id: number; job_code: string }[] = [];
+    const data: {
+      job_id: number;
+      order_id: number;
+      stop_seq: number;
+      distance_km: number;
+    }[] = [];
+
+    try {
+      await connection.beginTransaction();
+      await connection.execute("DELETE FROM job_stops");
+      await connection.execute("DELETE FROM job_sheets");
+      await connection.execute("DELETE FROM riders");
+
+      for (const rider of riders) {
+        const [result] = await connection.execute<ResultSetHeader>(
+          "INSERT INTO riders (rider_code, route_color, max_orders) VALUES (?, ?, ?)",
+          [rider.rider_code, rider.route_color, rider.max_orders ?? 3]
         );
-        data.push({
-          job_id: jobId,
-          order_id: stop.order_id,
-          stop_seq: stop.stop_seq,
-          distance_km: stop.distance_km,
+        riderData.push({
+          rider_id: result.insertId,
+          rider_code: rider.rider_code,
         });
       }
-    }
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
 
-  res.json({
-    message: "Job sheets dispatched successfully",
-    data: { jobStops: data, jobSheets: jobSheetData },
-  });
-});
+      const riderIdsByCode = new Map(
+        riderData.map((rider) => [rider.rider_code, rider.rider_id])
+      );
+      const jobIdsByCode = new Map<string, number>();
+
+      for (const jobSheet of jobSheets) {
+        const riderId = riderIdsByCode.get(jobSheet.rider.rider_code);
+        if (riderId === undefined) {
+          await connection.rollback();
+          res
+            .status(400)
+            .json({ error: "A job sheet references an unknown rider" });
+          return;
+        }
+
+        const [result] = await connection.execute<ResultSetHeader>(
+          "INSERT INTO job_sheets (job_code, rider_id, distance_km, duration_min, rider_pay) VALUES (?, ?, ?, ?, ?)",
+          [
+            jobSheet.job_code,
+            riderId,
+            jobSheet.distance_km,
+            jobSheet.duration_min,
+            jobSheet.rider_pay,
+          ]
+        );
+        jobSheetData.push({
+          job_id: result.insertId,
+          job_code: jobSheet.job_code,
+        });
+        jobIdsByCode.set(jobSheet.job_code, result.insertId);
+      }
+
+      for (const jobSheet of jobSheets) {
+        const jobId = jobIdsByCode.get(jobSheet.job_code);
+        if (jobId === undefined) {
+          throw new Error(`Missing inserted job sheet for ${jobSheet.job_code}`);
+        }
+
+        for (const stop of jobSheet.stops) {
+          await connection.execute(
+            "INSERT INTO job_stops (job_id, order_id, stop_seq, distance_km) VALUES (?, ?, ?, ?)",
+            [jobId, stop.order_id, stop.stop_seq, stop.distance_km]
+          );
+          data.push({
+            job_id: jobId,
+            order_id: stop.order_id,
+            stop_seq: stop.stop_seq,
+            distance_km: stop.distance_km,
+          });
+        }
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error; // ถูกจับโดย safe() แล้วตอบ 500
+    } finally {
+      connection.release();
+    }
+
+    res.json({
+      message: "Job sheets dispatched successfully",
+      data: { jobStops: data, jobSheets: jobSheetData },
+    });
+  })
+);
