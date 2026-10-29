@@ -35,10 +35,26 @@ router.post("/add", async (req, res) => {
   }
 
   const { name, phone, latitude, longitude } = req.body;
+  const normalizedName = typeof name === "string" ? name.trim() : "";
+
+  if (!normalizedName) {
+    res.status(400).json({ error: "Customer name is required" });
+    return;
+  }
+
+  const existingCustomers = await queryRows(
+    "SELECT customer_id FROM customers WHERE LOWER(TRIM(name)) = LOWER(?) LIMIT 1",
+    [normalizedName],
+  );
+
+  if (existingCustomers.length > 0) {
+    res.status(409).json({ error: "Customer name already exists" });
+    return;
+  }
 
   const result = await execute(
     "INSERT INTO customers (name, phone, latitude, longitude) VALUES (?, ?, ?, ?)",
-    [name, phone, latitude, longitude],
+    [normalizedName, phone, latitude, longitude],
   );
   const data = await queryRows(
     "SELECT * FROM customers WHERE customer_id = ?",
